@@ -1,0 +1,107 @@
+[project]
+name = "fooproj"
+version = "0.1.0"
+description = "Python boilerplate powered by uv and pyenv"
+readme = "README.md"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+  "ursina>=8.3.0,<9",
+]
+
+[project.scripts]
+fooproj = "fooproj.cli:main"
+
+[dependency-groups]
+dev = [
+  "mypy>=1.15.0",
+  "pre-commit>=4.2.0",
+  "pytest>=8.3.5",
+  "ruff>=0.11.10",
+]
+lint = [
+  "bandit>=1.7.9",
+  "black>=24.10.0",
+  "flake8>=7.1.1",
+  "isort>=5.13.2",
+  "pylint>=3.3.1",
+  "refurb>=2.0.0",
+  "ty>=0.0.1a4",
+  "vulture>=2.11",
+]
+
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py314"
+
+[tool.ruff.lint]
+select = [
+  "ANN",  # Require and validate type annotations.
+  "B",    # Catch likely bugs and risky patterns (flake8-bugbear).
+  "C4",   # Prefer concise and efficient comprehensions.
+  "D",    # Enforce docstring presence and style.
+  "EXE",  # Check shebangs and executable script conventions.
+  "F",    # Catch undefined names and unused imports (Pyflakes).
+  "FA",   # Future-annotations compatibility checks.
+  "FURB", # Apply Refurb modernization suggestions.
+  "G",    # Enforce safe logging string formatting.
+  "I",    # Enforce import sorting and grouping.
+  "ICN",  # Enforce import aliasing conventions.
+  "ISC",  # Detect implicit string concatenation issues.
+  "LOG",  # Validate logging usage patterns.
+  "NPY",  # Check NumPy-specific modern idioms.
+  "PIE",  # Enforce general Python idioms.
+  "Q",    # Enforce quote style consistency.
+  "RET",  # Catch ambiguous or unnecessary returns.
+  "RSE",  # Enforce clean and correct raise statements.
+  "SIM",  # Suggest simpler equivalent code.
+  "TC",   # Keep type-only imports behind TYPE_CHECKING.
+  "UP",   # Apply pyupgrade-style syntax modernization.
+  "W",    # Catch whitespace issues.
+]
+ignore = [
+  "B904",  # Allow raising without explicit exception chaining.
+  "B905",  # Do not require zip(..., strict=...).
+  "D202",  # Allow blank line after function docstring.
+  "D203",  # Do not require blank line before class docstring.
+  "D205",  # Do not require summary/description separation line.
+  "D213",  # Allow summary on first line of multi-line docstring.
+  "D405",  # Do not require strict section capitalization.
+  "D407",  # Do not require dashed underline after section name.
+  "D412",  # Allow blank lines between section headers and content.
+  "D416",  # Do not require section headers ending with colon.
+  "FA102", # Do not require from __future__ import annotations.
+  "UP015", # Allow explicit open() mode arguments.
+  "UP035", # Allow selected deprecated import paths.
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+  "PT009", # Allow unittest-style assertions in test modules.
+  "S101",  # Allow `assert` statements in test modules.
+]
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+packages = ["fooproj"]
+explicit_package_bases = false
+
+[[tool.mypy.overrides]]
+module = ["ursina", "ursina.*"]
+ignore_missing_imports = true
+
+[tool.bandit.assert_used]
+skips = ["*_test.py", "*test_*.py", "tests/**/*.py"]
