@@ -8,7 +8,7 @@ from fooproj.game.config import GameSettings
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI flags for runtime launch options."""
-    parser = argparse.ArgumentParser(description="Run the fooproj driving sandbox")
+    parser = argparse.ArgumentParser(description="Run the fooproj endless falling game")
     parser.add_argument(
         "--fullscreen",
         action="store_true",

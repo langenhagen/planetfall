@@ -1,8 +1,9 @@
 # Fooproj
 
-Third-person 3D Ursina driving sandbox in Python.
+Third-person endless falling game built with Ursina and Python.
 
-This project is nearly entirely vibe coded.
+The player dives through an infinite shaft, steers around obstacles, and
+collects glowing orbs while descending.
 
 ## Requirements
 
@@ -20,23 +21,26 @@ uv run fooproj
 
 ## Controls
 
-- Arrow keys: move (forward/back + strafe left/right)
-- Page Up / Page Down: rotate car left/right
-- Mouse move: orbit camera (captured cursor)
-- Mouse wheel: zoom in/out (zoom-in is clamped, zoom-out unbounded)
-- `c`: toggle orbit/chase camera
+- Arrow keys or `WASD`: steer while falling
+- `Space`: dive faster
+- Left Shift / Right Shift: air brake
+- Mouse move: orbit look (captured cursor)
+- Mouse wheel: zoom in/out
+- `c`: recenter camera
+- `r`: restart run
+- `u`: toggle controls hint
 
-### Optional PS5 Controller Support
+### PS5 Controller (Generic Gamepad Mapping)
 
-If you have a PS5 controller connected, try these mappings:
+Ursina exposes standard gamepad names, so PS5 controls map as:
 
-- R2 / L2: gas and brake/reverse (analog pressure supported)
-- L1 / R1: strafe left/right
-- Left stick X: steering
+- Left stick: steer
+- R2 / L2: dive faster / air brake
+- L1 / R1: digital steer assist left/right
 - Right stick: camera look
-- D-pad left: toggle orbit/chase camera
 - D-pad up/down: zoom in/out
-- Impact rumble on collisions (silently disabled when no controller is available)
+- D-pad left: recenter camera
+- Start: restart run
 
 ## Full Setup and Checks
 
@@ -48,7 +52,7 @@ pyenv local 3.14.3
 # create/update virtual environment and dependencies
 uv sync
 
-# launch the Ursina sandbox
+# launch the Ursina game
 uv run fooproj
 
 # run quality checks
@@ -62,11 +66,6 @@ uv run pre-commit install
 
 # run all hooks once manually
 uv run pre-commit run --all-files
-
-# optional: install and run extended lint stack
-uv sync --group lint
-uv run --group lint pylint fooproj tests
-uv run --group lint vulture fooproj tests
 ```
 
 ## Debug Capture Scripts
@@ -95,15 +94,11 @@ scripts/capture-window.sh --name "ursina" --out __debug/screens --frames 60
 ```
 
 You can combine capture scripts with `xdotool` input automation for repeatable
-drive scenarios and visual debugging.
+fall scenarios and visual debugging.
 
 ## Project Layout
 
 - `fooproj/`: application package and CLI entrypoint
-- `fooproj/game/`: runtime, input/camera controls, scene setup, lighting
+- `fooproj/game/`: runtime, control logic, procedural falling-scene generation
 - `tests/`: test suite
 - `pyproject.toml`: project metadata and tool/lint configuration
-
-## Notes
-
-- Project defaults use reproducible `uv run ...` commands.

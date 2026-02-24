@@ -1,9 +1,17 @@
-"""Scene blueprints for the Ursina driving sandbox world."""
+"""Procedural blueprint helpers for the endless falling course."""
 
 from dataclasses import dataclass
-from math import cos, radians, sin
+from typing import TYPE_CHECKING
 
-COURSE_RADIUS = 44.0
+if TYPE_CHECKING:
+    from random import Random
+else:  # pragma: no cover - runtime fallback for deferred annotations.
+    Random = object
+
+LANE_POSITIONS = (-6.0, -3.0, 0.0, 3.0, 6.0)
+BAND_SPACING = 18.0
+FRAME_RADIUS = 11.0
+COIN_SCORE_VALUE = 10
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,293 +24,258 @@ class Vec3:
 
 
 @dataclass(frozen=True, slots=True)
-class EntityBlueprint:
-    """Data-only description for spawning an Ursina entity."""
+class FallingBlueprint:
+    """Data-only description for spawning one falling-course entity."""
 
+    name: str
+    entity_kind: str
     model: str
     color_name: str
     scale: Vec3
     position: Vec3
-    is_dynamic: bool = True
+    collision_radius: float = 0.0
+    score_value: int = 0
 
 
-def starter_scene_blueprints() -> tuple[EntityBlueprint, ...]:
-    """Return entities for an obstacle-focused sandbox race arena."""
-    blueprints: list[EntityBlueprint] = []
-    blueprints.extend(_ground_layers())
-    blueprints.extend(_round_course_tiles())
-    blueprints.extend(_course_obstacles())
-    blueprints.extend(_trackside_houses())
-    blueprints.extend(_trackside_trees())
-    blueprints.extend(_perimeter_columns())
-    blueprints.extend(_cardinal_landmarks())
+def band_y_position(
+    *,
+    start_y: float,
+    band_index: int,
+    spacing: float = BAND_SPACING,
+) -> float:
+    """Convert a sequential band index into a world-space y position."""
+    return start_y - (band_index * spacing)
+
+
+def build_fall_band_blueprints(
+    *,
+    band_index: int,
+    y_position: float,
+    rng: Random,
+) -> tuple[FallingBlueprint, ...]:
+    """Build one procedural band containing obstacles, coins, and decor."""
+    blueprints: list[FallingBlueprint] = []
+    blueprints.extend(_frame_blueprints(y_position=y_position))
+
+    pattern = band_index % 4
+    if pattern == 0:
+        blueprints.extend(_gate_pattern_blueprints(y_position=y_position, rng=rng))
+    elif pattern == 1:
+        blueprints.extend(_slice_pattern_blueprints(y_position=y_position, rng=rng))
+    elif pattern == 2:
+        blueprints.extend(_slalom_pattern_blueprints(y_position=y_position, rng=rng))
+    else:
+        blueprints.extend(_coin_rain_blueprints(y_position=y_position, rng=rng))
+
     return tuple(blueprints)
 
 
-def _ground_layers() -> list[EntityBlueprint]:
-    """Create layered ground colors so the world reads like a track area."""
-    return [
-        EntityBlueprint(
-            model="plane",
-            color_name="olive",
-            scale=Vec3(320.0, 1.0, 320.0),
-            position=Vec3(0.0, 0.0, 0.0),
-            is_dynamic=False,
+def _frame_blueprints(*, y_position: float) -> tuple[FallingBlueprint, ...]:
+    return (
+        FallingBlueprint(
+            name="frame_wall_left",
+            entity_kind="decor",
+            model="cube",
+            color_name="dark_gray",
+            scale=Vec3(0.65, 10.0, 24.0),
+            position=Vec3(-FRAME_RADIUS, y_position, 0.0),
         ),
-        EntityBlueprint(
-            model="plane",
-            color_name="green",
-            scale=Vec3(200.0, 1.0, 200.0),
-            position=Vec3(0.0, 0.02, 0.0),
-            is_dynamic=False,
+        FallingBlueprint(
+            name="frame_wall_right",
+            entity_kind="decor",
+            model="cube",
+            color_name="dark_gray",
+            scale=Vec3(0.65, 10.0, 24.0),
+            position=Vec3(FRAME_RADIUS, y_position, 0.0),
         ),
-        EntityBlueprint(
-            model="plane",
-            color_name="lime",
-            scale=Vec3(78.0, 1.0, 78.0),
-            position=Vec3(0.0, 0.04, 0.0),
-            is_dynamic=False,
+        FallingBlueprint(
+            name="frame_wall_front",
+            entity_kind="decor",
+            model="cube",
+            color_name="smoke",
+            scale=Vec3(24.0, 10.0, 0.65),
+            position=Vec3(0.0, y_position, -FRAME_RADIUS),
         ),
-    ]
+        FallingBlueprint(
+            name="frame_wall_back",
+            entity_kind="decor",
+            model="cube",
+            color_name="smoke",
+            scale=Vec3(24.0, 10.0, 0.65),
+            position=Vec3(0.0, y_position, FRAME_RADIUS),
+        ),
+    )
 
 
-def _round_course_tiles() -> list[EntityBlueprint]:
-    """Create a wide circular driving loop with colored curb markers."""
-    tiles: list[EntityBlueprint] = []
-    segments = 72
-    road_tile_scale = Vec3(4.8, 0.16, 4.8)
+def _obstacle_blueprint(
+    *,
+    name: str,
+    x_pos: float,
+    y_pos: float,
+    z_pos: float,
+    scale: Vec3,
+) -> FallingBlueprint:
+    return FallingBlueprint(
+        name=name,
+        entity_kind="obstacle",
+        model="cube",
+        color_name="orange",
+        scale=scale,
+        position=Vec3(x_pos, y_pos, z_pos),
+        collision_radius=max(scale.x, scale.y, scale.z) * 0.45,
+    )
 
-    for segment_index in range(segments):
-        angle = (360.0 / segments) * segment_index
-        x_pos = sin(radians(angle)) * COURSE_RADIUS
-        z_pos = cos(radians(angle)) * COURSE_RADIUS
 
-        tiles.append(
-            EntityBlueprint(
-                model="cube",
-                color_name="dark_gray",
-                scale=road_tile_scale,
-                position=Vec3(x_pos, road_tile_scale.y * 0.5, z_pos),
-                is_dynamic=False,
+def _coin_blueprint(
+    *, name: str, x_pos: float, y_pos: float, z_pos: float
+) -> FallingBlueprint:
+    return FallingBlueprint(
+        name=name,
+        entity_kind="coin",
+        model="sphere",
+        color_name="yellow",
+        scale=Vec3(0.72, 0.72, 0.72),
+        position=Vec3(x_pos, y_pos, z_pos),
+        collision_radius=0.45,
+        score_value=COIN_SCORE_VALUE,
+    )
+
+
+def _gate_pattern_blueprints(
+    *, y_position: float, rng: Random
+) -> tuple[FallingBlueprint, ...]:
+    safe_lane_x = rng.choice(LANE_POSITIONS)
+    blueprints: list[FallingBlueprint] = []
+
+    for lane_x in LANE_POSITIONS:
+        if lane_x == safe_lane_x:
+            continue
+        blueprints.append(
+            _obstacle_blueprint(
+                name=f"gate_obstacle_{int(lane_x)}",
+                x_pos=lane_x,
+                y_pos=y_position,
+                z_pos=0.0,
+                scale=Vec3(2.4, 2.4, 2.4),
             ),
         )
 
-        if segment_index % 2 == 0:
-            curb_color = "red" if (segment_index // 2) % 2 == 0 else "white"
-            for curb_radius in (COURSE_RADIUS - 5.2, COURSE_RADIUS + 5.2):
-                curb_x = sin(radians(angle)) * curb_radius
-                curb_z = cos(radians(angle)) * curb_radius
-                tiles.append(
-                    EntityBlueprint(
-                        model="cube",
-                        color_name=curb_color,
-                        scale=Vec3(1.4, 0.22, 1.4),
-                        position=Vec3(curb_x, 0.11, curb_z),
-                        is_dynamic=False,
-                    ),
-                )
-
-    for stripe_index in range(-3, 4):
-        tiles.append(
-            EntityBlueprint(
-                model="cube",
-                color_name="smoke",
-                scale=Vec3(1.1, 0.18, 3.2),
-                position=Vec3(stripe_index * 1.4, 0.1, COURSE_RADIUS),
-                is_dynamic=False,
+    for coin_index, lane_z in enumerate((-4.0, 0.0, 4.0)):
+        blueprints.append(
+            _coin_blueprint(
+                name=f"gate_coin_{coin_index}",
+                x_pos=safe_lane_x,
+                y_pos=y_position + 0.35,
+                z_pos=lane_z,
             ),
         )
 
-    return tiles
+    return tuple(blueprints)
 
 
-def _course_obstacles() -> list[EntityBlueprint]:
-    """Place dynamic obstacles around the loop for dodge-heavy gameplay."""
-    obstacles: list[EntityBlueprint] = []
-    lane_offsets = (-2.6, 0.0, 2.6)
-    colors = ("orange", "yellow", "azure", "magenta", "cyan", "violet")
+def _slice_pattern_blueprints(
+    *, y_position: float, rng: Random
+) -> tuple[FallingBlueprint, ...]:
+    safe_lane_z = rng.choice(LANE_POSITIONS)
+    blueprints: list[FallingBlueprint] = []
 
-    for obstacle_index, angle in enumerate(range(12, 360, 24)):
-        lane_offset = lane_offsets[obstacle_index % len(lane_offsets)]
-        obstacle_radius = COURSE_RADIUS + lane_offset
-        x_pos = sin(radians(float(angle))) * obstacle_radius
-        z_pos = cos(radians(float(angle))) * obstacle_radius
-        model_name = "sphere" if obstacle_index % 2 else "cube"
-        scale = Vec3(1.5, 1.5, 1.5) if model_name == "sphere" else Vec3(1.8, 1.8, 1.8)
-
-        obstacles.append(
-            EntityBlueprint(
-                model=model_name,
-                color_name=colors[obstacle_index % len(colors)],
-                scale=scale,
-                position=Vec3(x_pos, scale.y * 0.5, z_pos),
+    for lane_z in LANE_POSITIONS:
+        if lane_z == safe_lane_z:
+            continue
+        blueprints.append(
+            _obstacle_blueprint(
+                name=f"slice_obstacle_{int(lane_z)}",
+                x_pos=0.0,
+                y_pos=y_position,
+                z_pos=lane_z,
+                scale=Vec3(2.2, 2.2, 2.2),
             ),
         )
 
-    for angle in range(0, 360, 45):
-        x_pos = sin(radians(float(angle))) * 16.0
-        z_pos = cos(radians(float(angle))) * 16.0
-        obstacles.append(
-            EntityBlueprint(
-                model="sphere",
-                color_name="yellow",
-                scale=Vec3(1.35, 1.35, 1.35),
-                position=Vec3(x_pos, 0.675, z_pos),
+    for coin_index, lane_x in enumerate((-3.0, 0.0, 3.0)):
+        blueprints.append(
+            _coin_blueprint(
+                name=f"slice_coin_{coin_index}",
+                x_pos=lane_x,
+                y_pos=y_position + 0.35,
+                z_pos=safe_lane_z,
             ),
         )
 
-    return obstacles
+    return tuple(blueprints)
 
 
-def _perimeter_columns() -> list[EntityBlueprint]:
-    """Create a large boundary ring of heavy columns."""
-    columns: list[EntityBlueprint] = []
-    colors = ("cyan", "magenta", "yellow", "lime")
-    color_index = 0
-    edge = 122.0
+def _slalom_pattern_blueprints(
+    *, y_position: float, rng: Random
+) -> tuple[FallingBlueprint, ...]:
+    lane_count = len(LANE_POSITIONS)
+    start_index = rng.randrange(lane_count)
+    blueprints: list[FallingBlueprint] = []
 
-    for step in range(-96, 97, 24):
-        edge_positions = (
-            (float(step), edge),
-            (float(step), -edge),
-            (edge, float(step)),
-            (-edge, float(step)),
+    for step_index, lane_x in enumerate(LANE_POSITIONS):
+        lane_z = LANE_POSITIONS[(start_index + step_index) % lane_count]
+        blueprints.append(
+            _obstacle_blueprint(
+                name=f"slalom_obstacle_{step_index}",
+                x_pos=lane_x,
+                y_pos=y_position,
+                z_pos=lane_z,
+                scale=Vec3(1.8, 1.8, 1.8),
+            ),
         )
-        for x_pos, z_pos in edge_positions:
-            columns.append(
-                EntityBlueprint(
-                    model="cube",
-                    color_name=colors[color_index % len(colors)],
-                    scale=Vec3(2.4, 6.2, 2.4),
-                    position=Vec3(x_pos, 3.1, z_pos),
-                    is_dynamic=False,
+
+    for step_index, lane_x in enumerate(LANE_POSITIONS):
+        lane_z = LANE_POSITIONS[(start_index + step_index + 2) % lane_count]
+        blueprints.append(
+            _coin_blueprint(
+                name=f"slalom_coin_{step_index}",
+                x_pos=lane_x,
+                y_pos=y_position + 0.35,
+                z_pos=lane_z,
+            ),
+        )
+
+    return tuple(blueprints)
+
+
+def _coin_rain_blueprints(
+    *, y_position: float, rng: Random
+) -> tuple[FallingBlueprint, ...]:
+    blueprints: list[FallingBlueprint] = []
+    corner_obstacles = ((-6.0, -6.0), (-6.0, 6.0), (6.0, -6.0), (6.0, 6.0))
+    for obstacle_index, (x_pos, z_pos) in enumerate(corner_obstacles):
+        blueprints.append(
+            _obstacle_blueprint(
+                name=f"coin_rain_corner_{obstacle_index}",
+                x_pos=x_pos,
+                y_pos=y_position,
+                z_pos=z_pos,
+                scale=Vec3(1.9, 1.9, 1.9),
+            ),
+        )
+
+    coin_index = 0
+    for lane_x in LANE_POSITIONS:
+        for lane_z in (-6.0, 0.0, 6.0):
+            blueprints.append(
+                _coin_blueprint(
+                    name=f"coin_rain_coin_{coin_index}",
+                    x_pos=lane_x,
+                    y_pos=y_position + 0.35,
+                    z_pos=lane_z,
                 ),
             )
-            color_index += 1
+            coin_index += 1
 
-    return columns
-
-
-def _trackside_houses() -> list[EntityBlueprint]:
-    """Place static house-like structures around the outer course area."""
-    houses: list[EntityBlueprint] = []
-    home_positions = (
-        Vec3(72.0, 0.0, 66.0),
-        Vec3(-76.0, 0.0, 58.0),
-        Vec3(74.0, 0.0, -62.0),
-        Vec3(-71.0, 0.0, -68.0),
-        Vec3(0.0, 0.0, 98.0),
-        Vec3(0.0, 0.0, -98.0),
-    )
-    wall_colors = ("peach", "smoke", "light_gray")
-
-    for house_index, base in enumerate(home_positions):
-        wall_color = wall_colors[house_index % len(wall_colors)]
-        houses.append(
-            EntityBlueprint(
-                model="cube",
-                color_name=wall_color,
-                scale=Vec3(9.0, 4.6, 9.0),
-                position=Vec3(base.x, 2.3, base.z),
-                is_dynamic=False,
-            ),
-        )
-        houses.append(
-            EntityBlueprint(
-                model="cube",
-                color_name="brown",
-                scale=Vec3(9.4, 1.1, 9.4),
-                position=Vec3(base.x, 4.95, base.z),
-                is_dynamic=False,
-            ),
-        )
-        houses.append(
-            EntityBlueprint(
-                model="cube",
-                color_name="dark_gray",
-                scale=Vec3(1.4, 2.5, 0.4),
-                position=Vec3(base.x, 1.25, base.z + 4.7),
-                is_dynamic=False,
+    if rng.random() < 0.6:
+        blueprints.append(
+            _obstacle_blueprint(
+                name="coin_rain_center",
+                x_pos=0.0,
+                y_pos=y_position,
+                z_pos=0.0,
+                scale=Vec3(2.2, 2.2, 2.2),
             ),
         )
 
-    return houses
-
-
-def _trackside_trees() -> list[EntityBlueprint]:
-    """Place static tree clusters to improve depth and silhouette variety."""
-    trees: list[EntityBlueprint] = []
-    canopy_colors = ("green", "lime")
-
-    for tree_index, angle in enumerate(range(0, 360, 30)):
-        radius = 84.0 if tree_index % 2 == 0 else 102.0
-        x_pos = sin(radians(float(angle))) * radius
-        z_pos = cos(radians(float(angle))) * radius
-        canopy_color = canopy_colors[tree_index % len(canopy_colors)]
-
-        trees.append(
-            EntityBlueprint(
-                model="cube",
-                color_name="brown",
-                scale=Vec3(0.8, 3.2, 0.8),
-                position=Vec3(x_pos, 1.6, z_pos),
-                is_dynamic=False,
-            ),
-        )
-        trees.append(
-            EntityBlueprint(
-                model="sphere",
-                color_name=canopy_color,
-                scale=Vec3(3.4, 3.4, 3.4),
-                position=Vec3(x_pos, 4.4, z_pos),
-                is_dynamic=False,
-            ),
-        )
-        trees.append(
-            EntityBlueprint(
-                model="sphere",
-                color_name=canopy_color,
-                scale=Vec3(2.6, 2.6, 2.6),
-                position=Vec3(x_pos + 1.2, 5.6, z_pos),
-                is_dynamic=False,
-            ),
-        )
-        trees.append(
-            EntityBlueprint(
-                model="sphere",
-                color_name=canopy_color,
-                scale=Vec3(2.6, 2.6, 2.6),
-                position=Vec3(x_pos - 1.2, 5.6, z_pos),
-                is_dynamic=False,
-            ),
-        )
-
-    return trees
-
-
-def _cardinal_landmarks() -> list[EntityBlueprint]:
-    """Create distant large landmarks to emphasize world scale."""
-    landmarks: list[EntityBlueprint] = []
-    layout = (
-        ("cube", "orange", Vec3(9.0, 16.0, 9.0), Vec3(0.0, 8.0, 118.0)),
-        ("cube", "azure", Vec3(9.0, 16.0, 9.0), Vec3(0.0, 8.0, -118.0)),
-        ("cube", "yellow", Vec3(9.0, 16.0, 9.0), Vec3(118.0, 8.0, 0.0)),
-        ("cube", "violet", Vec3(9.0, 16.0, 9.0), Vec3(-118.0, 8.0, 0.0)),
-        ("sphere", "lime", Vec3(7.0, 7.0, 7.0), Vec3(82.0, 3.5, 82.0)),
-        ("sphere", "magenta", Vec3(7.0, 7.0, 7.0), Vec3(-82.0, 3.5, 82.0)),
-        ("sphere", "cyan", Vec3(7.0, 7.0, 7.0), Vec3(82.0, 3.5, -82.0)),
-        ("sphere", "red", Vec3(7.0, 7.0, 7.0), Vec3(-82.0, 3.5, -82.0)),
-    )
-
-    for model_name, color_name, scale, position in layout:
-        landmarks.append(
-            EntityBlueprint(
-                model=model_name,
-                color_name=color_name,
-                scale=scale,
-                position=position,
-                is_dynamic=False,
-            ),
-        )
-
-    return landmarks
+    return tuple(blueprints)
