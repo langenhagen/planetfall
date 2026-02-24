@@ -24,6 +24,8 @@ class FallSettings:
     base_speed: float = 26.0
     boost_multiplier: float = 1.15
     brake_multiplier: float = 0.55
+    recovery_height: float = 12.0
+    recovery_score_penalty: int = 35
     spawn_ahead_distance: float = 320.0
     cleanup_above_distance: float = 52.0
     initial_spawn_y: float = -36.0
@@ -52,7 +54,6 @@ class GameSettings:
     borderless: bool = False
     fullscreen: bool = False
     development_mode: bool = True
-    max_health: int = 3
     movement: MovementSettings = field(default_factory=MovementSettings)
     fall: FallSettings = field(default_factory=FallSettings)
     camera: CameraSettings = field(default_factory=CameraSettings)

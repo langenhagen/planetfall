@@ -14,6 +14,7 @@ import ursina.color as color_module
 import ursina.shaders as ursina_shaders
 from ursina import (
     AmbientLight,
+    Audio,
     DirectionalLight,
     Entity,
     Text,
@@ -45,6 +46,25 @@ RUN_RANDOM_SEED = 20260224
 PLANET_APPROACH_DEPTH = 1600.0
 STARFIELD_COUNT = 48
 STARFIELD_RADIUS = 74.0
+ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets"
+SPACE_SKY_DIR = ASSETS_DIR / "NightSkyHDRI009_4K"
+SPACE_SKY_TEXTURE_CANDIDATES = (
+    "NightSkyHDRI009_4K_TONEMAPPED.jpg",
+    "NightSkyHDRI009.png",
+    "NightSkyHDRI009_4K_HDR.exr",
+)
+COIN_SFX_NAMES = (
+    "coin.ogg",
+    "coins.ogg",
+    "coin_pickup.ogg",
+    "pickup.ogg",
+)
+IMPACT_SFX_NAMES = (
+    "impact.ogg",
+    "hit.ogg",
+    "obstacle.ogg",
+    "collision.ogg",
+)
 SCROLL_DIRECTION_BY_KEY = {
     "scroll up": 1,
     "scroll down": -1,
@@ -96,14 +116,12 @@ class SpawnedObject:
 class FallingRunState:
     """Mutable run-state values tracked across gameplay frames."""
 
-    max_health: int
     score: int = 0
     collected_orbs: int = 0
-    health: int = 0
+    reset_count: int = 0
     deepest_y: float = 0.0
     next_band_index: int = 0
     next_band_y: float = 0.0
-    is_game_over: bool = False
     last_hit_time: float = 0.0
     spawned_objects: list[SpawnedObject] = field(default_factory=list)
 
@@ -122,8 +140,6 @@ class BackdropState:
 
     sky: Entity
     stars: tuple[Entity, ...]
-    planet: Entity
-    atmosphere_shell: Entity
 
 
 def resolve_color(color_name: str) -> Color:
@@ -195,7 +211,7 @@ def compute_gamepad_axes(
     stick_x = apply_deadzone(held.get("gamepad left stick x", 0.0))
     stick_y = apply_deadzone(held.get("gamepad left stick y", 0.0))
     x_axis = dominant_axis(stick_x, shoulder_axis)
-    z_axis = -stick_y
+    z_axis = stick_y
     dive_axis = apply_deadzone(
         held.get("gamepad right trigger", 0.0) - held.get("gamepad left trigger", 0.0),
     )
@@ -467,6 +483,8 @@ def create_controls_hint() -> Text:
             "Steer: arrows or WASD (up = up-screen)\n"
             "Dive faster: space / R2\n"
             "Air brake: shift / L2\n"
+            "Coin: pickup chime\n"
+            "Hit obstacle: thud + rumble + altitude reset\n"
             "Pad steer: left stick + L1/R1\n"
             "Look: mouse / right stick\n"
             "Zoom: mouse wheel / dpad up-down\n"
@@ -482,25 +500,13 @@ def create_controls_hint() -> Text:
 
 
 def create_status_text() -> Text:
-    """Create top-left run status text entity."""
+    """Create top-right run status text entity."""
     return Text(
         name="run_status_text",
         text="",
-        x=-0.86,
-        y=0.42,
+        x=0.56,
+        y=0.45,
         scale=1.05,
-    )
-
-
-def create_game_over_text() -> Text:
-    """Create centered game-over text shown when shields are depleted."""
-    return Text(
-        name="game_over_text",
-        text="Run Over\nPress R or Start to dive again",
-        origin=(0.0, 0.0),
-        scale=2.0,
-        background=True,
-        enabled=False,
     )
 
 
@@ -541,10 +547,14 @@ def configure_lighting(focus_entity: Entity) -> LightingRig:
 
 
 def create_space_backdrop() -> BackdropState:
-    """Create stars and a distant planet to sell the planetfall fantasy."""
+    """Create stars and a sky backdrop for deep-space descent."""
     sky_module = importlib.import_module("ursina.prefabs.sky")
     sky_factory = cast("type[Entity]", sky_module.Sky)
+    sky_texture_path = resolve_space_sky_texture_path()
     sky_entity = sky_factory()
+    if sky_texture_path is not None:
+        sky_texture_name = str(sky_texture_path.relative_to(application.asset_folder))
+        sky_entity.texture = sky_texture_name
     stars: list[Entity] = []
 
     for star_index in range(STARFIELD_COUNT):
@@ -564,30 +574,19 @@ def create_space_backdrop() -> BackdropState:
             ),
         )
 
-    planet = Entity(
-        name="planet_surface",
-        model="sphere",
-        color=rgba_color(34 / 255.0, 60 / 255.0, 94 / 255.0, 1.0),
-        scale=Vec3(980.0, 980.0, 980.0),
-        position=Vec3(0.0, -1900.0, 0.0),
-        unlit=True,
-    )
-    atmosphere_shell = Entity(
-        parent=planet,
-        name="planet_atmosphere_shell",
-        model="sphere",
-        color=color_module.rgba(0.26, 0.5, 0.86, 0.18),
-        scale=Vec3(1.08, 1.08, 1.08),
-        position=Vec3(0.0, 0.0, 0.0),
-        unlit=True,
-    )
-
     return BackdropState(
         sky=sky_entity,
         stars=tuple(stars),
-        planet=planet,
-        atmosphere_shell=atmosphere_shell,
     )
+
+
+def resolve_space_sky_texture_path() -> Path | None:
+    """Resolve a custom sky texture path from the NightSkyHDRI asset folder."""
+    for file_name in SPACE_SKY_TEXTURE_CANDIDATES:
+        candidate = SPACE_SKY_DIR / file_name
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def update_atmosphere_for_depth(
@@ -596,7 +595,7 @@ def update_atmosphere_for_depth(
     lighting_rig: LightingRig,
     backdrop_state: BackdropState,
 ) -> None:
-    """Shift sky and light colors from cold space to warm atmosphere."""
+    """Shift sky and light colors from cold space to high-atmosphere tones."""
     depth = max(0.0, -player.y)
     progress = max(0.0, min(1.0, depth / PLANET_APPROACH_DEPTH))
 
@@ -617,17 +616,6 @@ def update_atmosphere_for_depth(
     star_alpha = max(0.0, 1.0 - (progress * 1.35))
     for star in backdrop_state.stars:
         star.color = color_module.rgba(1.0, 1.0, 1.0, star_alpha)
-
-    backdrop_state.planet.color = lerp_rgb_color((34, 60, 94), (78, 133, 99), progress)
-    backdrop_state.atmosphere_shell.color = color_module.rgba(
-        0.26,
-        0.5,
-        0.86,
-        lerp_scalar(0.14, 0.5, progress),
-    )
-    backdrop_state.planet.x = player.x * 0.35
-    backdrop_state.planet.z = player.z * 0.35
-    backdrop_state.planet.y = -1900.0 + (progress * 620.0)
 
 
 def spawn_entity_from_blueprint(
@@ -681,17 +669,68 @@ def trigger_impact_rumble(intensity: float) -> None:
             )
 
 
+def play_coin_pickup_sfx() -> None:
+    """Play the configured coin pickup sound effect."""
+    with suppress(Exception):
+        coin_path = resolve_sfx_path(
+            preferred_names=COIN_SFX_NAMES,
+            fallback_pattern="coin*.ogg",
+        )
+        if coin_path is not None:
+            sound = Audio(coin_path, auto_destroy=True)
+            sound.volume = 0.7
+            sound.pitch = 1.0
+            return
+        sound = Audio("sine", auto_destroy=True)
+        sound.pitch = 2.0
+        sound.volume = 1.0
+
+
+def play_obstacle_hit_sfx() -> None:
+    """Play the configured obstacle impact sound effect."""
+    with suppress(Exception):
+        impact_path = resolve_sfx_path(
+            preferred_names=IMPACT_SFX_NAMES,
+            fallback_pattern="*impact*.ogg",
+        )
+        if impact_path is not None:
+            sound = Audio(impact_path, auto_destroy=True)
+            sound.volume = 0.75
+            sound.pitch = 1.0
+            return
+        sound = Audio("sine", auto_destroy=True)
+        sound.pitch = 1.0
+        sound.volume = 1.0
+
+
+def resolve_sfx_path(
+    *,
+    preferred_names: tuple[str, ...],
+    fallback_pattern: str,
+) -> Path | None:
+    """Resolve an audio file path from preferred names or a fallback glob."""
+    for file_name in preferred_names:
+        candidate = ASSETS_DIR / file_name
+        if candidate.exists():
+            return candidate
+
+    fallback_matches = sorted(ASSETS_DIR.glob(fallback_pattern))
+    if fallback_matches:
+        return fallback_matches[0]
+
+    return None
+
+
 def initialize_run_state(
     run_state: FallingRunState, fall_settings: FallSettings
 ) -> None:
     """Reset run-state values to initial defaults."""
     run_state.score = 0
     run_state.collected_orbs = 0
-    run_state.health = run_state.max_health
+    run_state.reset_count = 0
     run_state.deepest_y = 0.0
     run_state.next_band_index = 0
     run_state.next_band_y = fall_settings.initial_spawn_y
-    run_state.is_game_over = False
     run_state.last_hit_time = 0.0
 
 
@@ -754,8 +793,26 @@ def cleanup_passed_objects(
     run_state.spawned_objects = survivors
 
 
-def process_collisions(*, player: Entity, run_state: FallingRunState) -> None:
-    """Handle collisions with coins and obstacles for score and health."""
+def apply_obstacle_recovery(
+    *,
+    player: Entity,
+    motion_state: MotionState,
+    recovery_height: float,
+) -> None:
+    """Move the player upward after an obstacle hit and damp momentum."""
+    player.y += recovery_height
+    motion_state.horizontal_speed *= 0.2
+    motion_state.depth_speed *= 0.2
+
+
+def process_collisions(
+    *,
+    player: Entity,
+    motion_state: MotionState,
+    run_state: FallingRunState,
+    fall_settings: FallSettings,
+) -> None:
+    """Handle collisions with coins and obstacles for score and reset behavior."""
     now = monotonic()
     survivors: list[SpawnedObject] = []
 
@@ -774,6 +831,7 @@ def process_collisions(*, player: Entity, run_state: FallingRunState) -> None:
         if spawned.entity_kind == "coin":
             run_state.collected_orbs += 1
             run_state.score += spawned.score_value
+            play_coin_pickup_sfx()
             continue
 
         if spawned.entity_kind != "obstacle":
@@ -783,9 +841,15 @@ def process_collisions(*, player: Entity, run_state: FallingRunState) -> None:
             continue
 
         run_state.last_hit_time = now
-        run_state.health -= 1
-        run_state.score = max(0, run_state.score - 35)
+        run_state.reset_count += 1
+        run_state.score = max(0, run_state.score - fall_settings.recovery_score_penalty)
+        play_obstacle_hit_sfx()
         trigger_impact_rumble(intensity=0.65)
+        apply_obstacle_recovery(
+            player=player,
+            motion_state=motion_state,
+            recovery_height=fall_settings.recovery_height,
+        )
 
     run_state.spawned_objects = survivors
 
@@ -808,14 +872,14 @@ def depth_zone_label(depth: float) -> str:
 
 
 def update_status_text(run_state: FallingRunState, status_text: Text) -> None:
-    """Render current score, depth, and shield status into the HUD."""
+    """Render current score, depth, and reset count into the HUD."""
     depth = max(0.0, -run_state.deepest_y)
     status_text.text = (
         f"Score: {run_state.score}\n"
         f"Orbs: {run_state.collected_orbs}\n"
         f"Depth: {depth:.0f} m\n"
         f"Zone: {depth_zone_label(depth)}\n"
-        f"Shields: {max(0, run_state.health)}"
+        f"Resets: {run_state.reset_count}"
     )
 
 
@@ -931,7 +995,6 @@ def install_game_controller(
     backdrop_state: BackdropState,
     controls_hint: Text,
     status_text: Text,
-    game_over_text: Text,
 ) -> Entity:
     """Attach per-frame gameplay update and input handlers."""
     controller = Entity(name="fall_game_controller")
@@ -942,7 +1005,7 @@ def install_game_controller(
         distance=settings.camera.distance,
     )
     motion_state = MotionState()
-    run_state = FallingRunState(max_health=settings.max_health)
+    run_state = FallingRunState()
     initialize_run_state(run_state, settings.fall)
 
     def reset_run() -> None:
@@ -956,7 +1019,6 @@ def install_game_controller(
         camera_state.yaw_angle = 0.0
         camera_state.pitch_angle = settings.camera.start_pitch
         camera_state.distance = settings.camera.distance
-        game_over_text.enabled = False
         spawn_bands_ahead(
             run_state=run_state,
             player_y=player.y,
@@ -991,36 +1053,36 @@ def install_game_controller(
             )
             return
 
-        if not run_state.is_game_over:
-            apply_player_movement(
-                player=player,
-                motion_state=motion_state,
-                movement_settings=settings.movement,
-                fall_settings=settings.fall,
-                x_axis=x_axis,
-                z_axis=z_axis,
-                dive_axis=dive_axis,
-                dt=dt,
-            )
-            run_state.deepest_y = min(run_state.deepest_y, player.y)
+        apply_player_movement(
+            player=player,
+            motion_state=motion_state,
+            movement_settings=settings.movement,
+            fall_settings=settings.fall,
+            x_axis=x_axis,
+            z_axis=z_axis,
+            dive_axis=dive_axis,
+            dt=dt,
+        )
+        run_state.deepest_y = min(run_state.deepest_y, player.y)
 
-            spawn_bands_ahead(
-                run_state=run_state,
-                player_y=player.y,
-                rng=randomizer,
-                fall_settings=settings.fall,
-            )
-            spin_coin_entities(run_state, dt)
-            process_collisions(player=player, run_state=run_state)
-            cleanup_passed_objects(
-                run_state=run_state,
-                player_y=player.y,
-                cleanup_above_distance=settings.fall.cleanup_above_distance,
-            )
-
-            if run_state.health <= 0:
-                run_state.is_game_over = True
-                game_over_text.enabled = True
+        spawn_bands_ahead(
+            run_state=run_state,
+            player_y=player.y,
+            rng=randomizer,
+            fall_settings=settings.fall,
+        )
+        spin_coin_entities(run_state, dt)
+        process_collisions(
+            player=player,
+            motion_state=motion_state,
+            run_state=run_state,
+            fall_settings=settings.fall,
+        )
+        cleanup_passed_objects(
+            run_state=run_state,
+            player_y=player.y,
+            cleanup_above_distance=settings.fall.cleanup_above_distance,
+        )
 
         update_camera_tracking(
             player=player,
@@ -1083,7 +1145,6 @@ def run_game(settings: GameSettings | None = None) -> None:
     configure_mouse_capture()
     controls_hint = create_controls_hint()
     status_text = create_status_text()
-    game_over_text = create_game_over_text()
     lighting_rig = configure_lighting(player)
     backdrop_state = create_space_backdrop()
     install_game_controller(
@@ -1094,7 +1155,6 @@ def run_game(settings: GameSettings | None = None) -> None:
         backdrop_state=backdrop_state,
         controls_hint=controls_hint,
         status_text=status_text,
-        game_over_text=game_over_text,
     )
 
     # Ursina's app proxy is typed as object here, so dynamic access is needed.

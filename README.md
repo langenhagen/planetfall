@@ -24,6 +24,7 @@ uv run fooproj
 - Arrow keys or `WASD`: steer while falling (`Up`/`W` move up-screen)
 - `Space`: dive faster
 - Left Shift / Right Shift: air brake
+- Obstacle hit: rumble + reset a bit higher (no death)
 - Mouse move: orbit look (captured cursor)
 - Mouse wheel: zoom in/out
 - `c`: recenter camera

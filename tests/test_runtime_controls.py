@@ -1,11 +1,15 @@
 """Tests for falling-game runtime control math helpers."""
 
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, cast
 from unittest import TestCase
 
 from ursina import Vec3
 
 from fooproj.game.runtime import (
+    MotionState,
     apply_deadzone,
+    apply_obstacle_recovery,
     clamp_to_play_area,
     compute_fall_speed,
     compute_gamepad_axes,
@@ -18,7 +22,17 @@ from fooproj.game.runtime import (
     should_spawn_next_band,
 )
 
+if TYPE_CHECKING:
+    from ursina import Entity
+
 CHECKER = TestCase()
+
+
+@dataclass(slots=True)
+class DummyPlayer:
+    """Tiny test helper with the y attribute used in recovery logic."""
+
+    y: float
 
 
 def test_compute_keyboard_axes_default_zero() -> None:
@@ -57,7 +71,7 @@ def test_compute_gamepad_axes_maps_ps_style_controls() -> None:
     }
     x_axis, z_axis, dive_axis, look_x, look_y = compute_gamepad_axes(held)
     CHECKER.assertEqual(x_axis, -1.0)
-    CHECKER.assertEqual(z_axis, 0.75)
+    CHECKER.assertEqual(z_axis, -0.75)
     CHECKER.assertAlmostEqual(dive_axis, 0.65, places=5)
     CHECKER.assertAlmostEqual(look_x, 0.0048, places=5)
     CHECKER.assertAlmostEqual(look_y, -0.0024, places=5)
@@ -125,6 +139,22 @@ def test_compute_smoothed_lateral_speed_decelerates_toward_zero() -> None:
     )
     CHECKER.assertGreaterEqual(speed, 0.0)
     CHECKER.assertLess(speed, 8.0)
+
+
+def test_apply_obstacle_recovery_lifts_player_and_damps_speed() -> None:
+    """Raise the player and damp movement after obstacle impact."""
+    player = cast("Entity", DummyPlayer(y=-180.0))
+    motion_state = MotionState(horizontal_speed=7.5, depth_speed=-4.0)
+
+    apply_obstacle_recovery(
+        player=player,
+        motion_state=motion_state,
+        recovery_height=12.0,
+    )
+
+    CHECKER.assertEqual(player.y, -168.0)
+    CHECKER.assertEqual(motion_state.horizontal_speed, 1.5)
+    CHECKER.assertEqual(motion_state.depth_speed, -0.8)
 
 
 def test_compute_look_angles_updates_and_clamps_pitch() -> None:
