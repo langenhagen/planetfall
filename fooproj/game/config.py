@@ -9,6 +9,10 @@ class MovementSettings:
 
     horizontal_speed: float = 18.0
     depth_speed: float = 14.0
+    horizontal_accel_rate: float = 9.5
+    horizontal_decel_rate: float = 11.0
+    depth_accel_rate: float = 8.5
+    depth_decel_rate: float = 10.0
     play_area_radius: float = 8.2
     tilt_degrees: float = 24.0
 

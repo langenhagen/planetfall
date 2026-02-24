@@ -22,7 +22,7 @@ def test_band_y_position_steps_downward_by_spacing() -> None:
 
 
 def test_build_fall_band_blueprints_contains_decor_and_collidables() -> None:
-    """Include tunnel frame pieces plus obstacle/coin gameplay objects."""
+    """Include decorative shards plus obstacle/coin gameplay objects."""
     blueprints = build_fall_band_blueprints(
         band_index=0,
         y_position=-50.0,
@@ -32,6 +32,18 @@ def test_build_fall_band_blueprints_contains_decor_and_collidables() -> None:
     CHECKER.assertIn("decor", kinds)
     CHECKER.assertIn("obstacle", kinds)
     CHECKER.assertIn("coin", kinds)
+
+
+def test_build_fall_band_blueprints_has_no_outer_wall_segments() -> None:
+    """Avoid enclosing wall segments so the run feels open-air."""
+    blueprints = build_fall_band_blueprints(
+        band_index=1,
+        y_position=-68.0,
+        rng=Random(5),
+    )
+    names = {blueprint.name for blueprint in blueprints}
+    CHECKER.assertNotIn("frame_wall_left", names)
+    CHECKER.assertNotIn("frame_wall_right", names)
 
 
 def test_build_fall_band_blueprints_keeps_positions_inside_lane_bounds() -> None:

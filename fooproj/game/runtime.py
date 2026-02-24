@@ -3,6 +3,7 @@
 import importlib
 from contextlib import suppress
 from dataclasses import dataclass, field
+from math import cos, sin, tau
 from pathlib import Path
 from random import Random
 from time import monotonic
@@ -15,7 +16,6 @@ from ursina import (
     AmbientLight,
     DirectionalLight,
     Entity,
-    Sky,
     Text,
     Vec2,
     Vec3,
@@ -41,8 +41,10 @@ GAMEPAD_DEADZONE = 0.08
 GAMEPAD_LOOK_SENSITIVITY = 0.012
 PLAYER_COLLISION_RADIUS = 0.95
 OBSTACLE_HIT_COOLDOWN_SECONDS = 0.45
-RUMBLE_COOLDOWN_SECONDS = 0.12
 RUN_RANDOM_SEED = 20260224
+PLANET_APPROACH_DEPTH = 1600.0
+STARFIELD_COUNT = 48
+STARFIELD_RADIUS = 74.0
 SCROLL_DIRECTION_BY_KEY = {
     "scroll up": 1,
     "scroll down": -1,
@@ -72,6 +74,14 @@ class CameraState:
 
 
 @dataclass(slots=True)
+class MotionState:
+    """Mutable player movement speeds for gentle acceleration/deceleration."""
+
+    horizontal_speed: float = 0.0
+    depth_speed: float = 0.0
+
+
+@dataclass(slots=True)
 class SpawnedObject:
     """Runtime state for one spawned world object."""
 
@@ -98,9 +108,33 @@ class FallingRunState:
     spawned_objects: list[SpawnedObject] = field(default_factory=list)
 
 
+@dataclass(frozen=True, slots=True)
+class LightingRig:
+    """Runtime references for lighting entities that change with depth."""
+
+    key_light: DirectionalLight
+    ambient_light: AmbientLight
+
+
+@dataclass(frozen=True, slots=True)
+class BackdropState:
+    """Runtime references for starfield and planetfall backdrop entities."""
+
+    sky: Entity
+    stars: tuple[Entity, ...]
+    planet: Entity
+    atmosphere_shell: Entity
+
+
 def resolve_color(color_name: str) -> Color:
     """Resolve a color name from Ursina's built-in color palette."""
     return cast("Color", getattr(color_module, color_name, color_module.white))
+
+
+def rgba_color(red: float, green: float, blue: float, alpha: float = 1.0) -> Color:
+    """Create a color using Ursina's runtime rgba helper."""
+    rgba_factory = getattr(color_module, "rgba")  # noqa: B009  # B009: getattr-with-constant
+    return cast("Color", rgba_factory(red, green, blue, alpha))
 
 
 def mark_lit_shadowed(entity: Entity) -> Entity:
@@ -138,10 +172,10 @@ def compute_keyboard_axes(held: dict[str, float]) -> tuple[float, float, float]:
         - held.get("a", 0.0)
     )
     z_axis = (
-        held.get("down arrow", 0.0)
-        + held.get("s", 0.0)
-        - held.get("up arrow", 0.0)
-        - held.get("w", 0.0)
+        held.get("up arrow", 0.0)
+        + held.get("w", 0.0)
+        - held.get("down arrow", 0.0)
+        - held.get("s", 0.0)
     )
     dive_axis = held.get("space", 0.0) - max(
         held.get("left shift", 0.0),
@@ -209,6 +243,54 @@ def clamp_to_play_area(
 
     scale = play_area_radius / radial_distance
     return x_value * scale, z_value * scale
+
+
+def lerp_scalar(start_value: float, end_value: float, factor: float) -> float:
+    """Linearly interpolate between two scalar values."""
+    return start_value + ((end_value - start_value) * factor)
+
+
+def lerp_rgb_color(
+    start_rgb: tuple[int, int, int],
+    end_rgb: tuple[int, int, int],
+    factor: float,
+) -> Color:
+    """Interpolate between two rgb tuples and return a color value."""
+    clamped_factor = max(0.0, min(1.0, factor))
+    red = round(lerp_scalar(float(start_rgb[0]), float(end_rgb[0]), clamped_factor))
+    green = round(lerp_scalar(float(start_rgb[1]), float(end_rgb[1]), clamped_factor))
+    blue = round(lerp_scalar(float(start_rgb[2]), float(end_rgb[2]), clamped_factor))
+    return rgba_color(red / 255.0, green / 255.0, blue / 255.0, 1.0)
+
+
+def compute_smoothed_lateral_speed(
+    *,
+    current_speed: float,
+    axis_input: float,
+    max_speed: float,
+    acceleration_rate: float,
+    deceleration_rate: float,
+    dt: float,
+) -> float:
+    """Smooth horizontal speed changes for gentle acceleration/deceleration."""
+    if dt <= 0.0:
+        return current_speed
+
+    target_speed = axis_input * max_speed
+    if target_speed == 0.0:
+        response_rate = deceleration_rate
+    elif abs(target_speed) > abs(current_speed):
+        response_rate = acceleration_rate
+    else:
+        response_rate = deceleration_rate
+
+    if target_speed != 0.0 and (target_speed * current_speed) < 0.0:
+        response_rate = max(response_rate, deceleration_rate * 1.25)
+
+    return cast(
+        "float",
+        lerp_exponential_decay(current_speed, target_speed, dt * response_rate),
+    )
 
 
 def compute_fall_speed(
@@ -382,7 +464,7 @@ def create_controls_hint() -> Text:
     return Text(
         name="controls_hint_text",
         text=(
-            "Steer: arrows or WASD\n"
+            "Steer: arrows or WASD (up = up-screen)\n"
             "Dive faster: space / R2\n"
             "Air brake: shift / L2\n"
             "Pad steer: left stick + L1/R1\n"
@@ -422,7 +504,7 @@ def create_game_over_text() -> Text:
     )
 
 
-def configure_lighting(focus_entity: Entity) -> None:
+def configure_lighting(focus_entity: Entity) -> LightingRig:
     """Create one sun light and ambient fill with stable shadow bounds."""
     sun_direction = Vec3(0.75, -1.2, -0.45).normalized()
     key_light = DirectionalLight(shadows=True, shadow_map_resolution=Vec2(3072, 3072))
@@ -454,6 +536,98 @@ def configure_lighting(focus_entity: Entity) -> None:
         key_light.update_bounds(shadow_bounds)
 
     shadow_controller.update = update_shadow_bounds
+
+    return LightingRig(key_light=key_light, ambient_light=ambient_light)
+
+
+def create_space_backdrop() -> BackdropState:
+    """Create stars and a distant planet to sell the planetfall fantasy."""
+    sky_module = importlib.import_module("ursina.prefabs.sky")
+    sky_factory = cast("type[Entity]", sky_module.Sky)
+    sky_entity = sky_factory()
+    stars: list[Entity] = []
+
+    for star_index in range(STARFIELD_COUNT):
+        angle = (tau / STARFIELD_COUNT) * star_index
+        radius = STARFIELD_RADIUS + ((star_index % 7) * 4.5)
+        star_y = 48.0 + ((star_index % 9) * 12.0)
+        if star_index % 2:
+            star_y *= 0.55
+        stars.append(
+            Entity(
+                name=f"space_star_{star_index}",
+                model="sphere",
+                scale=Vec3(0.18, 0.18, 0.18),
+                position=Vec3(cos(angle) * radius, star_y, sin(angle) * radius),
+                color=color_module.rgba(1.0, 1.0, 1.0, 1.0),
+                unlit=True,
+            ),
+        )
+
+    planet = Entity(
+        name="planet_surface",
+        model="sphere",
+        color=rgba_color(34 / 255.0, 60 / 255.0, 94 / 255.0, 1.0),
+        scale=Vec3(980.0, 980.0, 980.0),
+        position=Vec3(0.0, -1900.0, 0.0),
+        unlit=True,
+    )
+    atmosphere_shell = Entity(
+        parent=planet,
+        name="planet_atmosphere_shell",
+        model="sphere",
+        color=color_module.rgba(0.26, 0.5, 0.86, 0.18),
+        scale=Vec3(1.08, 1.08, 1.08),
+        position=Vec3(0.0, 0.0, 0.0),
+        unlit=True,
+    )
+
+    return BackdropState(
+        sky=sky_entity,
+        stars=tuple(stars),
+        planet=planet,
+        atmosphere_shell=atmosphere_shell,
+    )
+
+
+def update_atmosphere_for_depth(
+    *,
+    player: Entity,
+    lighting_rig: LightingRig,
+    backdrop_state: BackdropState,
+) -> None:
+    """Shift sky and light colors from cold space to warm atmosphere."""
+    depth = max(0.0, -player.y)
+    progress = max(0.0, min(1.0, depth / PLANET_APPROACH_DEPTH))
+
+    backdrop_state.sky.color = lerp_rgb_color((7, 10, 24), (145, 186, 214), progress)
+    lighting_rig.ambient_light.color = color_module.rgba(
+        lerp_scalar(0.12, 0.38, progress),
+        lerp_scalar(0.15, 0.42, progress),
+        lerp_scalar(0.24, 0.48, progress),
+        1.0,
+    )
+    lighting_rig.key_light.color = color_module.rgba(
+        lerp_scalar(0.65, 1.0, progress),
+        lerp_scalar(0.72, 0.95, progress),
+        lerp_scalar(0.82, 0.9, progress),
+        1.0,
+    )
+
+    star_alpha = max(0.0, 1.0 - (progress * 1.35))
+    for star in backdrop_state.stars:
+        star.color = color_module.rgba(1.0, 1.0, 1.0, star_alpha)
+
+    backdrop_state.planet.color = lerp_rgb_color((34, 60, 94), (78, 133, 99), progress)
+    backdrop_state.atmosphere_shell.color = color_module.rgba(
+        0.26,
+        0.5,
+        0.86,
+        lerp_scalar(0.14, 0.5, progress),
+    )
+    backdrop_state.planet.x = player.x * 0.35
+    backdrop_state.planet.z = player.z * 0.35
+    backdrop_state.planet.y = -1900.0 + (progress * 620.0)
 
 
 def spawn_entity_from_blueprint(
@@ -624,6 +798,15 @@ def spin_coin_entities(run_state: FallingRunState, dt: float) -> None:
         spawned.entity.rotation_y += spawned.spin_speed * dt
 
 
+def depth_zone_label(depth: float) -> str:
+    """Return a readable biome label for the current descent depth."""
+    if depth < 420.0:
+        return "Deep Space"
+    if depth < 980.0:
+        return "Upper Atmosphere"
+    return "Planetfall"
+
+
 def update_status_text(run_state: FallingRunState, status_text: Text) -> None:
     """Render current score, depth, and shield status into the HUD."""
     depth = max(0.0, -run_state.deepest_y)
@@ -631,6 +814,7 @@ def update_status_text(run_state: FallingRunState, status_text: Text) -> None:
         f"Score: {run_state.score}\n"
         f"Orbs: {run_state.collected_orbs}\n"
         f"Depth: {depth:.0f} m\n"
+        f"Zone: {depth_zone_label(depth)}\n"
         f"Shields: {max(0, run_state.health)}"
     )
 
@@ -667,6 +851,7 @@ def update_camera_tracking(
 def apply_player_movement(
     *,
     player: Entity,
+    motion_state: MotionState,
     movement_settings: MovementSettings,
     fall_settings: FallSettings,
     x_axis: float,
@@ -682,17 +867,44 @@ def apply_player_movement(
         brake_multiplier=fall_settings.brake_multiplier,
     )
 
+    motion_state.horizontal_speed = compute_smoothed_lateral_speed(
+        current_speed=motion_state.horizontal_speed,
+        axis_input=x_axis,
+        max_speed=movement_settings.horizontal_speed,
+        acceleration_rate=movement_settings.horizontal_accel_rate,
+        deceleration_rate=movement_settings.horizontal_decel_rate,
+        dt=dt,
+    )
+    motion_state.depth_speed = compute_smoothed_lateral_speed(
+        current_speed=motion_state.depth_speed,
+        axis_input=z_axis,
+        max_speed=movement_settings.depth_speed,
+        acceleration_rate=movement_settings.depth_accel_rate,
+        deceleration_rate=movement_settings.depth_decel_rate,
+        dt=dt,
+    )
+
     player.y -= fall_speed * dt
-    player.x += x_axis * movement_settings.horizontal_speed * dt
-    player.z += z_axis * movement_settings.depth_speed * dt
+    player.x += motion_state.horizontal_speed * dt
+    player.z += motion_state.depth_speed * dt
     player.x, player.z = clamp_to_play_area(
         player.x,
         player.z,
         movement_settings.play_area_radius,
     )
 
-    target_roll = -x_axis * movement_settings.tilt_degrees
-    target_pitch = z_axis * movement_settings.tilt_degrees * 0.7
+    normalized_horizontal = 0.0
+    if movement_settings.horizontal_speed > 0.0:
+        normalized_horizontal = (
+            motion_state.horizontal_speed / movement_settings.horizontal_speed
+        )
+
+    normalized_depth = 0.0
+    if movement_settings.depth_speed > 0.0:
+        normalized_depth = motion_state.depth_speed / movement_settings.depth_speed
+
+    target_roll = -normalized_horizontal * movement_settings.tilt_degrees
+    target_pitch = normalized_depth * movement_settings.tilt_degrees * 0.7
     player.rotation_z = cast(
         "float",
         lerp_exponential_decay(player.rotation_z, target_roll, dt * 9.0),
@@ -703,7 +915,9 @@ def apply_player_movement(
     )
     player.rotation_y = cast(
         "float",
-        lerp_exponential_decay(player.rotation_y, x_axis * 22.0, dt * 6.0),
+        lerp_exponential_decay(
+            player.rotation_y, normalized_horizontal * 22.0, dt * 6.0
+        ),
     )
     return fall_speed
 
@@ -713,6 +927,8 @@ def install_game_controller(
     player: Entity,
     orbit_rig: OrbitRig,
     settings: GameSettings,
+    lighting_rig: LightingRig,
+    backdrop_state: BackdropState,
     controls_hint: Text,
     status_text: Text,
     game_over_text: Text,
@@ -725,6 +941,7 @@ def install_game_controller(
         pitch_angle=settings.camera.start_pitch,
         distance=settings.camera.distance,
     )
+    motion_state = MotionState()
     run_state = FallingRunState(max_health=settings.max_health)
     initialize_run_state(run_state, settings.fall)
 
@@ -734,6 +951,8 @@ def install_game_controller(
         randomizer.seed(RUN_RANDOM_SEED)
         player.position = Vec3(0.0, 0.0, 0.0)
         player.rotation = Vec3(0.0, 0.0, 0.0)
+        motion_state.horizontal_speed = 0.0
+        motion_state.depth_speed = 0.0
         camera_state.yaw_angle = 0.0
         camera_state.pitch_angle = settings.camera.start_pitch
         camera_state.distance = settings.camera.distance
@@ -743,6 +962,11 @@ def install_game_controller(
             player_y=player.y,
             rng=randomizer,
             fall_settings=settings.fall,
+        )
+        update_atmosphere_for_depth(
+            player=player,
+            lighting_rig=lighting_rig,
+            backdrop_state=backdrop_state,
         )
         update_status_text(run_state, status_text)
 
@@ -770,6 +994,7 @@ def install_game_controller(
         if not run_state.is_game_over:
             apply_player_movement(
                 player=player,
+                motion_state=motion_state,
                 movement_settings=settings.movement,
                 fall_settings=settings.fall,
                 x_axis=x_axis,
@@ -803,6 +1028,11 @@ def install_game_controller(
             camera_state=camera_state,
             camera_settings=settings.camera,
             look_velocity=look_velocity,
+        )
+        update_atmosphere_for_depth(
+            player=player,
+            lighting_rig=lighting_rig,
+            backdrop_state=backdrop_state,
         )
         update_status_text(run_state, status_text)
 
@@ -854,17 +1084,18 @@ def run_game(settings: GameSettings | None = None) -> None:
     controls_hint = create_controls_hint()
     status_text = create_status_text()
     game_over_text = create_game_over_text()
-    configure_lighting(player)
+    lighting_rig = configure_lighting(player)
+    backdrop_state = create_space_backdrop()
     install_game_controller(
         player=player,
         orbit_rig=orbit_rig,
         settings=active_settings,
+        lighting_rig=lighting_rig,
+        backdrop_state=backdrop_state,
         controls_hint=controls_hint,
         status_text=status_text,
         game_over_text=game_over_text,
     )
-
-    Sky(color=color_module.rgb(140, 168, 189))
 
     # Ursina's app proxy is typed as object here, so dynamic access is needed.
     run_callable = getattr(app, "run")  # noqa: B009  # B009: getattr-with-constant

@@ -1,6 +1,7 @@
 """Procedural blueprint helpers for the endless falling course."""
 
 from dataclasses import dataclass
+from math import atan2, cos, sin, sqrt, tau
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -10,8 +11,9 @@ else:  # pragma: no cover - runtime fallback for deferred annotations.
 
 LANE_POSITIONS = (-6.0, -3.0, 0.0, 3.0, 6.0)
 BAND_SPACING = 18.0
-FRAME_RADIUS = 11.0
 COIN_SCORE_VALUE = 10
+MAX_COLLIDABLE_ABS = 6.0
+DECOR_RING_RADIUS = 10.5
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,58 +55,77 @@ def build_fall_band_blueprints(
     y_position: float,
     rng: Random,
 ) -> tuple[FallingBlueprint, ...]:
-    """Build one procedural band containing obstacles, coins, and decor."""
+    """Build one designed band with chained coins and structured obstacles."""
     blueprints: list[FallingBlueprint] = []
-    blueprints.extend(_frame_blueprints(y_position=y_position))
+    blueprints.extend(
+        _decor_shards_blueprints(y_position=y_position, band_index=band_index)
+    )
+    blueprints.extend(
+        _coin_chain_blueprints(y_position=y_position, band_index=band_index)
+    )
 
-    pattern = band_index % 4
+    pattern = band_index % 5
     if pattern == 0:
-        blueprints.extend(_gate_pattern_blueprints(y_position=y_position, rng=rng))
+        blueprints.extend(
+            _gate_pattern_blueprints(y_position=y_position, band_index=band_index)
+        )
     elif pattern == 1:
-        blueprints.extend(_slice_pattern_blueprints(y_position=y_position, rng=rng))
+        blueprints.extend(
+            _slalom_pattern_blueprints(y_position=y_position, band_index=band_index),
+        )
     elif pattern == 2:
-        blueprints.extend(_slalom_pattern_blueprints(y_position=y_position, rng=rng))
+        blueprints.extend(
+            _chicane_pattern_blueprints(y_position=y_position, band_index=band_index),
+        )
+    elif pattern == 3:
+        blueprints.extend(
+            _ring_gap_pattern_blueprints(y_position=y_position, band_index=band_index),
+        )
     else:
-        blueprints.extend(_coin_rain_blueprints(y_position=y_position, rng=rng))
+        blueprints.extend(
+            _comet_pattern_blueprints(y_position=y_position, band_index=band_index)
+        )
+
+    if band_index % 7 == 0:
+        blueprints.extend(
+            _bonus_coin_arc_blueprints(
+                y_position=y_position,
+                band_index=band_index,
+                rng=rng,
+            ),
+        )
 
     return tuple(blueprints)
 
 
-def _frame_blueprints(*, y_position: float) -> tuple[FallingBlueprint, ...]:
-    return (
-        FallingBlueprint(
-            name="frame_wall_left",
-            entity_kind="decor",
-            model="cube",
-            color_name="dark_gray",
-            scale=Vec3(0.65, 10.0, 24.0),
-            position=Vec3(-FRAME_RADIUS, y_position, 0.0),
-        ),
-        FallingBlueprint(
-            name="frame_wall_right",
-            entity_kind="decor",
-            model="cube",
-            color_name="dark_gray",
-            scale=Vec3(0.65, 10.0, 24.0),
-            position=Vec3(FRAME_RADIUS, y_position, 0.0),
-        ),
-        FallingBlueprint(
-            name="frame_wall_front",
-            entity_kind="decor",
-            model="cube",
-            color_name="smoke",
-            scale=Vec3(24.0, 10.0, 0.65),
-            position=Vec3(0.0, y_position, -FRAME_RADIUS),
-        ),
-        FallingBlueprint(
-            name="frame_wall_back",
-            entity_kind="decor",
-            model="cube",
-            color_name="smoke",
-            scale=Vec3(24.0, 10.0, 0.65),
-            position=Vec3(0.0, y_position, FRAME_RADIUS),
-        ),
-    )
+def _path_center(band_index: int) -> Vec3:
+    angle = band_index * 0.37
+    radius = 3.6 + (sin(band_index * 0.19) * 1.2)
+    return Vec3(cos(angle) * radius, 0.0, sin(angle * 0.87) * radius)
+
+
+def _path_direction(band_index: int) -> Vec3:
+    previous_point = _path_center(band_index - 1)
+    next_point = _path_center(band_index + 1)
+    delta_x = next_point.x - previous_point.x
+    delta_z = next_point.z - previous_point.z
+    length = sqrt((delta_x * delta_x) + (delta_z * delta_z))
+    if length <= 0.0001:
+        return Vec3(1.0, 0.0, 0.0)
+    return Vec3(delta_x / length, 0.0, delta_z / length)
+
+
+def _lane_snap(value: float) -> float:
+    return min(LANE_POSITIONS, key=lambda lane_value: abs(lane_value - value))
+
+
+def _clamp_collidable_axis(value: float) -> float:
+    return max(-MAX_COLLIDABLE_ABS, min(MAX_COLLIDABLE_ABS, value))
+
+
+def _angular_distance(angle_a: float, angle_b: float) -> float:
+    delta = abs((angle_a - angle_b) % tau)
+    return min(delta, tau - delta)
 
 
 def _obstacle_blueprint(
@@ -114,20 +135,29 @@ def _obstacle_blueprint(
     y_pos: float,
     z_pos: float,
     scale: Vec3,
+    color_name: str = "orange",
 ) -> FallingBlueprint:
     return FallingBlueprint(
         name=name,
         entity_kind="obstacle",
         model="cube",
-        color_name="orange",
+        color_name=color_name,
         scale=scale,
-        position=Vec3(x_pos, y_pos, z_pos),
+        position=Vec3(
+            _clamp_collidable_axis(x_pos),
+            y_pos,
+            _clamp_collidable_axis(z_pos),
+        ),
         collision_radius=max(scale.x, scale.y, scale.z) * 0.45,
     )
 
 
 def _coin_blueprint(
-    *, name: str, x_pos: float, y_pos: float, z_pos: float
+    *,
+    name: str,
+    x_pos: float,
+    y_pos: float,
+    z_pos: float,
 ) -> FallingBlueprint:
     return FallingBlueprint(
         name=name,
@@ -135,16 +165,102 @@ def _coin_blueprint(
         model="sphere",
         color_name="yellow",
         scale=Vec3(0.72, 0.72, 0.72),
-        position=Vec3(x_pos, y_pos, z_pos),
+        position=Vec3(
+            _clamp_collidable_axis(x_pos),
+            y_pos,
+            _clamp_collidable_axis(z_pos),
+        ),
         collision_radius=0.45,
         score_value=COIN_SCORE_VALUE,
     )
 
 
-def _gate_pattern_blueprints(
-    *, y_position: float, rng: Random
+def _decor_shards_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
 ) -> tuple[FallingBlueprint, ...]:
-    safe_lane_x = rng.choice(LANE_POSITIONS)
+    first_angle = (band_index * 0.23) % tau
+    second_angle = (first_angle + (tau * 0.5)) % tau
+    return (
+        FallingBlueprint(
+            name="decor_shard_primary",
+            entity_kind="decor",
+            model="cube",
+            color_name="dark_gray",
+            scale=Vec3(1.4, 0.45, 1.9),
+            position=Vec3(
+                cos(first_angle) * DECOR_RING_RADIUS,
+                y_position + 0.55,
+                sin(first_angle) * DECOR_RING_RADIUS,
+            ),
+        ),
+        FallingBlueprint(
+            name="decor_shard_secondary",
+            entity_kind="decor",
+            model="sphere",
+            color_name="smoke",
+            scale=Vec3(1.2, 1.2, 1.2),
+            position=Vec3(
+                cos(second_angle) * DECOR_RING_RADIUS,
+                y_position - 0.35,
+                sin(second_angle) * DECOR_RING_RADIUS,
+            ),
+        ),
+    )
+
+
+def _coin_chain_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[FallingBlueprint, ...]:
+    center = _path_center(band_index)
+    direction = _path_direction(band_index)
+    side = Vec3(-direction.z, 0.0, direction.x)
+
+    blueprints = [
+        _coin_blueprint(
+            name="coin_chain_lead",
+            x_pos=center.x - (direction.x * 1.2),
+            y_pos=y_position + 0.4,
+            z_pos=center.z - (direction.z * 1.2),
+        ),
+        _coin_blueprint(
+            name="coin_chain_center",
+            x_pos=center.x,
+            y_pos=y_position + 0.4,
+            z_pos=center.z,
+        ),
+        _coin_blueprint(
+            name="coin_chain_tail",
+            x_pos=center.x + (direction.x * 1.2),
+            y_pos=y_position + 0.4,
+            z_pos=center.z + (direction.z * 1.2),
+        ),
+    ]
+
+    if band_index % 2 == 0:
+        blueprints.append(
+            _coin_blueprint(
+                name="coin_chain_side",
+                x_pos=center.x + (side.x * 1.05),
+                y_pos=y_position + 0.65,
+                z_pos=center.z + (side.z * 1.05),
+            ),
+        )
+
+    return tuple(blueprints)
+
+
+def _gate_pattern_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[FallingBlueprint, ...]:
+    path_center = _path_center(band_index)
+    safe_lane_x = _lane_snap(path_center.x)
+    row_z = _lane_snap(path_center.z * 0.45)
     blueprints: list[FallingBlueprint] = []
 
     for lane_x in LANE_POSITIONS:
@@ -152,53 +268,12 @@ def _gate_pattern_blueprints(
             continue
         blueprints.append(
             _obstacle_blueprint(
-                name=f"gate_obstacle_{int(lane_x)}",
+                name=f"gate_block_{int(lane_x)}",
                 x_pos=lane_x,
                 y_pos=y_position,
-                z_pos=0.0,
-                scale=Vec3(2.4, 2.4, 2.4),
-            ),
-        )
-
-    for coin_index, lane_z in enumerate((-4.0, 0.0, 4.0)):
-        blueprints.append(
-            _coin_blueprint(
-                name=f"gate_coin_{coin_index}",
-                x_pos=safe_lane_x,
-                y_pos=y_position + 0.35,
-                z_pos=lane_z,
-            ),
-        )
-
-    return tuple(blueprints)
-
-
-def _slice_pattern_blueprints(
-    *, y_position: float, rng: Random
-) -> tuple[FallingBlueprint, ...]:
-    safe_lane_z = rng.choice(LANE_POSITIONS)
-    blueprints: list[FallingBlueprint] = []
-
-    for lane_z in LANE_POSITIONS:
-        if lane_z == safe_lane_z:
-            continue
-        blueprints.append(
-            _obstacle_blueprint(
-                name=f"slice_obstacle_{int(lane_z)}",
-                x_pos=0.0,
-                y_pos=y_position,
-                z_pos=lane_z,
-                scale=Vec3(2.2, 2.2, 2.2),
-            ),
-        )
-
-    for coin_index, lane_x in enumerate((-3.0, 0.0, 3.0)):
-        blueprints.append(
-            _coin_blueprint(
-                name=f"slice_coin_{coin_index}",
-                x_pos=lane_x,
-                y_pos=y_position + 0.35,
-                z_pos=safe_lane_z,
+                z_pos=row_z,
+                scale=Vec3(2.3, 2.3, 2.3),
+                color_name="orange",
             ),
         )
 
@@ -206,75 +281,140 @@ def _slice_pattern_blueprints(
 
 
 def _slalom_pattern_blueprints(
-    *, y_position: float, rng: Random
+    *,
+    y_position: float,
+    band_index: int,
 ) -> tuple[FallingBlueprint, ...]:
-    lane_count = len(LANE_POSITIONS)
-    start_index = rng.randrange(lane_count)
+    shift = band_index % len(LANE_POSITIONS)
+    safe_lane_x = _lane_snap(_path_center(band_index).x)
     blueprints: list[FallingBlueprint] = []
 
-    for step_index, lane_x in enumerate(LANE_POSITIONS):
-        lane_z = LANE_POSITIONS[(start_index + step_index) % lane_count]
+    for index, lane_x in enumerate(LANE_POSITIONS):
+        lane_z = LANE_POSITIONS[(index + shift) % len(LANE_POSITIONS)]
+        if lane_x == safe_lane_x:
+            continue
         blueprints.append(
             _obstacle_blueprint(
-                name=f"slalom_obstacle_{step_index}",
+                name=f"slalom_block_{index}",
                 x_pos=lane_x,
                 y_pos=y_position,
                 z_pos=lane_z,
-                scale=Vec3(1.8, 1.8, 1.8),
-            ),
-        )
-
-    for step_index, lane_x in enumerate(LANE_POSITIONS):
-        lane_z = LANE_POSITIONS[(start_index + step_index + 2) % lane_count]
-        blueprints.append(
-            _coin_blueprint(
-                name=f"slalom_coin_{step_index}",
-                x_pos=lane_x,
-                y_pos=y_position + 0.35,
-                z_pos=lane_z,
+                scale=Vec3(1.9, 1.9, 1.9),
+                color_name="red",
             ),
         )
 
     return tuple(blueprints)
 
 
-def _coin_rain_blueprints(
-    *, y_position: float, rng: Random
+def _chicane_pattern_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
 ) -> tuple[FallingBlueprint, ...]:
+    path_center = _path_center(band_index)
+    row_a_z = _lane_snap(path_center.z + 2.4)
+    row_b_z = _lane_snap(path_center.z - 2.4)
+    open_a = _lane_snap(path_center.x - 3.0)
+    open_b = _lane_snap(path_center.x + 3.0)
     blueprints: list[FallingBlueprint] = []
-    corner_obstacles = ((-6.0, -6.0), (-6.0, 6.0), (6.0, -6.0), (6.0, 6.0))
-    for obstacle_index, (x_pos, z_pos) in enumerate(corner_obstacles):
+
+    for lane_x in LANE_POSITIONS:
+        if lane_x != open_a:
+            blueprints.append(
+                _obstacle_blueprint(
+                    name=f"chicane_row_a_{int(lane_x)}",
+                    x_pos=lane_x,
+                    y_pos=y_position,
+                    z_pos=row_a_z,
+                    scale=Vec3(2.0, 2.0, 2.0),
+                    color_name="violet",
+                ),
+            )
+        if lane_x != open_b:
+            blueprints.append(
+                _obstacle_blueprint(
+                    name=f"chicane_row_b_{int(lane_x)}",
+                    x_pos=lane_x,
+                    y_pos=y_position,
+                    z_pos=row_b_z,
+                    scale=Vec3(2.0, 2.0, 2.0),
+                    color_name="azure",
+                ),
+            )
+
+    return tuple(blueprints)
+
+
+def _ring_gap_pattern_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[FallingBlueprint, ...]:
+    path_center = _path_center(band_index)
+    gap_angle = atan2(path_center.z, path_center.x)
+    blueprints: list[FallingBlueprint] = []
+
+    for index in range(10):
+        angle = (tau / 10.0) * index
+        if _angular_distance(angle, gap_angle) < 0.52:
+            continue
         blueprints.append(
             _obstacle_blueprint(
-                name=f"coin_rain_corner_{obstacle_index}",
-                x_pos=x_pos,
+                name=f"ring_block_{index}",
+                x_pos=cos(angle) * 5.8,
                 y_pos=y_position,
-                z_pos=z_pos,
-                scale=Vec3(1.9, 1.9, 1.9),
+                z_pos=sin(angle) * 5.8,
+                scale=Vec3(1.6, 1.6, 1.6),
+                color_name="magenta",
             ),
         )
 
-    coin_index = 0
-    for lane_x in LANE_POSITIONS:
-        for lane_z in (-6.0, 0.0, 6.0):
-            blueprints.append(
-                _coin_blueprint(
-                    name=f"coin_rain_coin_{coin_index}",
-                    x_pos=lane_x,
-                    y_pos=y_position + 0.35,
-                    z_pos=lane_z,
-                ),
-            )
-            coin_index += 1
+    return tuple(blueprints)
 
-    if rng.random() < 0.6:
+
+def _comet_pattern_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[FallingBlueprint, ...]:
+    base_angle = band_index * 0.35
+    blueprints: list[FallingBlueprint] = []
+
+    for index in range(4):
+        angle = base_angle + (index * 0.58)
         blueprints.append(
             _obstacle_blueprint(
-                name="coin_rain_center",
-                x_pos=0.0,
+                name=f"comet_block_{index}",
+                x_pos=cos(angle) * 5.5,
                 y_pos=y_position,
-                z_pos=0.0,
-                scale=Vec3(2.2, 2.2, 2.2),
+                z_pos=sin(angle) * 5.5,
+                scale=Vec3(1.8, 1.8, 1.8),
+                color_name="brown",
+            ),
+        )
+
+    return tuple(blueprints)
+
+
+def _bonus_coin_arc_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+    rng: Random,
+) -> tuple[FallingBlueprint, ...]:
+    center = _path_center(band_index)
+    side_sign = -1.0 if rng.random() < 0.5 else 1.0
+    blueprints: list[FallingBlueprint] = []
+
+    for index in range(3):
+        lift = (index - 1) * 0.95
+        blueprints.append(
+            _coin_blueprint(
+                name=f"bonus_arc_coin_{index}",
+                x_pos=center.x + (side_sign * (2.0 + (index * 0.6))),
+                y_pos=y_position + 0.9,
+                z_pos=center.z + lift,
             ),
         )
 

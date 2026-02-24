@@ -11,6 +11,7 @@ from fooproj.game.runtime import (
     compute_gamepad_axes,
     compute_keyboard_axes,
     compute_look_angles,
+    compute_smoothed_lateral_speed,
     compute_zoom_distance,
     dominant_axis,
     should_despawn_object,
@@ -31,8 +32,8 @@ def test_compute_keyboard_axes_combines_arrow_and_wasd_inputs() -> None:
     held = {
         "right arrow": 1.0,
         "a": 0.25,
-        "s": 1.0,
-        "up arrow": 0.5,
+        "s": 0.5,
+        "up arrow": 1.0,
         "space": 1.0,
         "left shift": 0.0,
     }
@@ -96,6 +97,34 @@ def test_compute_fall_speed_brakes_but_never_stops() -> None:
     )
     CHECKER.assertGreater(speed, 0.0)
     CHECKER.assertLess(speed, 20.0)
+
+
+def test_compute_smoothed_lateral_speed_accelerates_toward_target() -> None:
+    """Increase lateral speed gradually when axis input is applied."""
+    speed = compute_smoothed_lateral_speed(
+        current_speed=0.0,
+        axis_input=1.0,
+        max_speed=18.0,
+        acceleration_rate=9.5,
+        deceleration_rate=11.0,
+        dt=0.1,
+    )
+    CHECKER.assertGreater(speed, 0.0)
+    CHECKER.assertLess(speed, 18.0)
+
+
+def test_compute_smoothed_lateral_speed_decelerates_toward_zero() -> None:
+    """Reduce lateral speed smoothly when axis input is released."""
+    speed = compute_smoothed_lateral_speed(
+        current_speed=8.0,
+        axis_input=0.0,
+        max_speed=18.0,
+        acceleration_rate=9.5,
+        deceleration_rate=11.0,
+        dt=0.1,
+    )
+    CHECKER.assertGreaterEqual(speed, 0.0)
+    CHECKER.assertLess(speed, 8.0)
 
 
 def test_compute_look_angles_updates_and_clamps_pitch() -> None:

@@ -2,8 +2,8 @@
 
 Third-person endless falling game built with Ursina and Python.
 
-The player dives through an infinite shaft, steers around obstacles, and
-collects glowing orbs while descending.
+The player dives from deep space toward a distant planet, steers around
+obstacles, and collects chained glowing orbs while descending.
 
 ## Requirements
 
@@ -21,7 +21,7 @@ uv run fooproj
 
 ## Controls
 
-- Arrow keys or `WASD`: steer while falling
+- Arrow keys or `WASD`: steer while falling (`Up`/`W` move up-screen)
 - `Space`: dive faster
 - Left Shift / Right Shift: air brake
 - Mouse move: orbit look (captured cursor)
