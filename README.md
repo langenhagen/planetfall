@@ -16,7 +16,7 @@ obstacles, and collects chained glowing orbs while descending.
 pyenv install -s 3.14.3
 pyenv local 3.14.3
 uv sync
-uv run barproj
+uv run planetfall
 ```
 
 ## Controls
@@ -24,7 +24,9 @@ uv run barproj
 - Arrow keys or `WASD`: steer while falling
 - `Space`: dive faster
 - Left Shift / Right Shift: air brake
+- `Q` / `E` and `PgUp` / `PgDn`: rotate body left/right
 - Obstacle hit: rumble + reset a bit higher (no death)
+- Halo coins are high-value bonus pickups
 - Mouse move: orbit look (captured cursor)
 - Mouse wheel: zoom in/out
 - `p`: pause/resume
@@ -38,7 +40,7 @@ Ursina exposes standard gamepad names, so PS5 controls map as:
 
 - Left stick: steer
 - R2 / L2: dive faster / air brake
-- L1 / R1: digital steer assist left/right
+- L1 / R1: rotate body left/right
 - Right stick: camera look
 - D-pad up/down: zoom in/out
 - D-pad left: recenter camera
@@ -55,12 +57,12 @@ pyenv local 3.14.3
 uv sync
 
 # launch the Ursina game
-uv run barproj
+uv run planetfall
 
 # run quality checks
 uv run ruff check .
 uv run ruff format .
-uv run mypy barproj
+uv run mypy planetfall
 uv run pytest
 
 # install git hooks
@@ -100,7 +102,7 @@ fall scenarios and visual debugging.
 
 ## Project Layout
 
-- `barproj/`: application package and CLI entrypoint
-- `barproj/game/`: runtime, control logic, procedural falling-scene generation
+- `planetfall/`: application package and CLI entrypoint
+- `planetfall/game/`: runtime, control logic, procedural falling-scene generation
 - `tests/`: test suite
 - `pyproject.toml`: project metadata and tool/lint configuration
