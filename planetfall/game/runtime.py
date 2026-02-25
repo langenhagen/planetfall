@@ -3,6 +3,7 @@
 import importlib
 from contextlib import suppress
 from dataclasses import dataclass, field
+from functools import lru_cache
 from math import cos, sin, tau
 from pathlib import Path
 from random import Random
@@ -461,7 +462,6 @@ def create_space_backdrop() -> BackdropState:
 
     stars: list[Entity] = []
     nebulae: list[Entity] = []
-    motion_motes: list[Entity] = []
 
     for star_index in range(STARFIELD_COUNT):
         angle = (tau / STARFIELD_COUNT) * star_index
@@ -766,6 +766,7 @@ def play_obstacle_hit_sfx() -> None:
         play_sfx_clip(clip_name="sine", volume=1.0, pitch=1.0)
 
 
+@lru_cache(maxsize=8)
 def resolve_sfx_path(
     *,
     preferred_names: tuple[str, ...],
@@ -893,35 +894,44 @@ def process_collisions(
             survivors.append(spawned)
             continue
 
-        distance = (spawned.entity.position - player.position).length()
+        delta = spawned.entity.position - player.position
+        distance_squared = (
+            (delta.x * delta.x) + (delta.y * delta.y) + (delta.z * delta.z)
+        )
         hit_radius = PLAYER_COLLISION_RADIUS + spawned.collision_radius
-        if distance > hit_radius:
+        if distance_squared > (hit_radius * hit_radius):
             survivors.append(spawned)
             continue
 
-        destroy_entity_tree(spawned.entity)
         if spawned.entity_kind == "coin":
+            destroy_entity_tree(spawned.entity)
             run_state.collected_orbs += 1
             run_state.score += spawned.score_value
             play_coin_pickup_sfx()
             continue
 
-        if spawned.entity_kind != "obstacle":
+        if spawned.entity_kind == "obstacle":
+            if now - run_state.last_hit_time < OBSTACLE_HIT_COOLDOWN_SECONDS:
+                survivors.append(spawned)
+                continue
+
+            destroy_entity_tree(spawned.entity)
+            run_state.last_hit_time = now
+            run_state.reset_count += 1
+            run_state.score = max(
+                0,
+                run_state.score - fall_settings.recovery_score_penalty,
+            )
+            play_obstacle_hit_sfx()
+            trigger_impact_rumble(intensity=0.65)
+            apply_obstacle_recovery(
+                player=player,
+                motion_state=motion_state,
+                recovery_height=fall_settings.recovery_height,
+            )
             continue
 
-        if now - run_state.last_hit_time < OBSTACLE_HIT_COOLDOWN_SECONDS:
-            continue
-
-        run_state.last_hit_time = now
-        run_state.reset_count += 1
-        run_state.score = max(0, run_state.score - fall_settings.recovery_score_penalty)
-        play_obstacle_hit_sfx()
-        trigger_impact_rumble(intensity=0.65)
-        apply_obstacle_recovery(
-            player=player,
-            motion_state=motion_state,
-            recovery_height=fall_settings.recovery_height,
-        )
+        destroy_entity_tree(spawned.entity)
 
     run_state.spawned_objects = survivors
 
@@ -935,18 +945,25 @@ def animate_spawned_objects(
     runtime_time = monotonic()
     for spawned in run_state.spawned_objects:
         if spawned.fade_duration > 0.0:
-            fade_progress = max(
-                0.0,
-                min(1.0, (runtime_time - spawned.spawn_time) / spawned.fade_duration),
-            )
-            alpha_blend = 0.35 + (fade_progress * 0.65)
             target_red, target_green, target_blue, target_alpha = spawned.target_rgba
-            spawned.entity.color = rgba_color(
-                target_red,
-                target_green,
-                target_blue,
-                target_alpha * alpha_blend,
-            )
+            elapsed = runtime_time - spawned.spawn_time
+            if elapsed >= spawned.fade_duration:
+                spawned.entity.color = rgba_color(
+                    target_red,
+                    target_green,
+                    target_blue,
+                    target_alpha,
+                )
+                spawned.fade_duration = 0.0
+            else:
+                fade_progress = max(0.0, min(1.0, elapsed / spawned.fade_duration))
+                alpha_blend = 0.35 + (fade_progress * 0.65)
+                spawned.entity.color = rgba_color(
+                    target_red,
+                    target_green,
+                    target_blue,
+                    target_alpha * alpha_blend,
+                )
 
         if abs(spawned.entity.y - player_y) > ANIMATION_CULL_DISTANCE:
             continue
@@ -1026,7 +1043,7 @@ def apply_player_movement(
     dt: float,
 ) -> float:
     """Move the player avatar and return effective vertical fall speed."""
-    fall_speed = compute_fall_speed(
+    fall_speed: float = compute_fall_speed(
         base_speed=fall_settings.base_speed,
         dive_axis=dive_axis,
         boost_multiplier=fall_settings.boost_multiplier,
