@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 else:  # pragma: no cover - runtime fallback for deferred annotations.
     Random = object
 
-TUNNEL_WIDTH_SCALE = 1.5
+TUNNEL_WIDTH_SCALE = 1.5  # Master width multiplier for lanes and formations.
 LANE_POSITIONS = (
     -6.0 * TUNNEL_WIDTH_SCALE,
     -3.0 * TUNNEL_WIDTH_SCALE,
@@ -17,16 +17,17 @@ LANE_POSITIONS = (
     3.0 * TUNNEL_WIDTH_SCALE,
     6.0 * TUNNEL_WIDTH_SCALE,
 )
-BAND_SPACING = 18.0
-COIN_SCORE_VALUE = 10
-HIGH_VALUE_COIN_SCORE_VALUE = 25
-MAX_COLLIDABLE_ABS = 6.0 * TUNNEL_WIDTH_SCALE
-DECOR_RING_RADIUS = 10.5 * TUNNEL_WIDTH_SCALE
-PATTERN_CHICANE = 2
-PATTERN_RING_GAP = 3
+BAND_SPACING = 18.0  # Vertical distance between generated gameplay bands.
+COIN_SCORE_VALUE = 10  # Standard coin value.
+HIGH_VALUE_COIN_SCORE_VALUE = 25  # Bonus coin value (halo-highlighted).
+MAX_COLLIDABLE_ABS = 6.0 * TUNNEL_WIDTH_SCALE  # Clamp for obstacle/coin placement.
+DECOR_RING_RADIUS = 10.5 * TUNNEL_WIDTH_SCALE  # Radius for non-collidable ambience.
+PATTERN_CHICANE = 2  # Pattern index for alternating dual-row gates.
+PATTERN_RING_GAP = 3  # Pattern index for ring obstacle with one open sector.
+# Small-length guard to avoid divide-by-zero normalization.
 PATH_DIRECTION_EPSILON = 1e-4
-RING_GAP_ANGLE_THRESHOLD = 0.52
-BONUS_ARC_SIDE_SPLIT = 0.5
+RING_GAP_ANGLE_THRESHOLD = 0.52  # Angular width of the safe opening in ring patterns.
+BONUS_ARC_SIDE_SPLIT = 0.5  # 50/50 chance for bonus arc on left or right side.
 
 
 @dataclass(frozen=True, slots=True)
