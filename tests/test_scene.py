@@ -3,14 +3,21 @@
 from random import Random
 from unittest import TestCase
 
-from barproj.game.scene import (
+from planetfall.game.scene import (
     BAND_SPACING,
+    COIN_SCORE_VALUE,
+    HIGH_VALUE_COIN_SCORE_VALUE,
     LANE_POSITIONS,
     band_y_position,
     build_fall_band_blueprints,
 )
 
 CHECKER = TestCase()
+
+
+def deterministic_rng(seed: int) -> Random:
+    """Create deterministic non-crypto RNG for gameplay layout tests."""
+    return Random(seed)  # noqa: S311  # nosec B311
 
 
 def test_band_y_position_steps_downward_by_spacing() -> None:
@@ -26,7 +33,7 @@ def test_build_fall_band_blueprints_contains_decor_and_collidables() -> None:
     blueprints = build_fall_band_blueprints(
         band_index=0,
         y_position=-50.0,
-        rng=Random(7),
+        rng=deterministic_rng(7),
     )
     kinds = {blueprint.entity_kind for blueprint in blueprints}
     CHECKER.assertIn("decor", kinds)
@@ -39,7 +46,7 @@ def test_build_fall_band_blueprints_has_no_outer_wall_segments() -> None:
     blueprints = build_fall_band_blueprints(
         band_index=1,
         y_position=-68.0,
-        rng=Random(5),
+        rng=deterministic_rng(5),
     )
     names = {blueprint.name for blueprint in blueprints}
     CHECKER.assertNotIn("frame_wall_left", names)
@@ -51,7 +58,7 @@ def test_build_fall_band_blueprints_keeps_positions_inside_lane_bounds() -> None
     blueprints = build_fall_band_blueprints(
         band_index=2,
         y_position=-90.0,
-        rng=Random(11),
+        rng=deterministic_rng(11),
     )
     collidable_blueprints = [
         blueprint for blueprint in blueprints if blueprint.collision_radius > 0.0
@@ -69,11 +76,27 @@ def test_build_fall_band_blueprints_is_reproducible_for_seed() -> None:
     first = build_fall_band_blueprints(
         band_index=3,
         y_position=-144.0,
-        rng=Random(42),
+        rng=deterministic_rng(42),
     )
     second = build_fall_band_blueprints(
         band_index=3,
         y_position=-144.0,
-        rng=Random(42),
+        rng=deterministic_rng(42),
     )
     CHECKER.assertEqual(first, second)
+
+
+def test_bonus_arc_contains_high_value_coins() -> None:
+    """Spawn occasional bonus arc coins with higher score values."""
+    blueprints = build_fall_band_blueprints(
+        band_index=7,
+        y_position=-160.0,
+        rng=deterministic_rng(19),
+    )
+    coin_scores = [
+        blueprint.score_value
+        for blueprint in blueprints
+        if blueprint.entity_kind == "coin"
+    ]
+    CHECKER.assertIn(HIGH_VALUE_COIN_SCORE_VALUE, coin_scores)
+    CHECKER.assertIn(COIN_SCORE_VALUE, coin_scores)

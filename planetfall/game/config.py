@@ -13,6 +13,7 @@ class MovementSettings:
     horizontal_decel_rate: float = 7.0
     depth_accel_rate: float = 5.4
     depth_decel_rate: float = 6.2
+    yaw_turn_speed: float = 130.0
     play_area_radius: float = 12.3
     tilt_degrees: float = 24.0
 

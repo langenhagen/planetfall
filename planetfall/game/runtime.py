@@ -7,7 +7,7 @@ from math import cos, radians, sin, tau
 from pathlib import Path
 from random import Random
 from time import monotonic
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import ursina
 import ursina.color as color_module
@@ -31,7 +31,12 @@ from ursina import (
 from ursina.main import Ursina
 
 from .config import CameraSettings, FallSettings, GameSettings, MovementSettings
-from .scene import BAND_SPACING, FallingBlueprint, build_fall_band_blueprints
+from .scene import (
+    BAND_SPACING,
+    COIN_SCORE_VALUE,
+    FallingBlueprint,
+    build_fall_band_blueprints,
+)
 
 if TYPE_CHECKING:
     from ursina.color import Color
@@ -44,6 +49,8 @@ PLAYER_COLLISION_RADIUS = 0.95
 OBSTACLE_HIT_COOLDOWN_SECONDS = 0.45
 RUN_RANDOM_SEED = 20260224
 PLANET_APPROACH_DEPTH = 1600.0
+SPACE_ZONE_DEPTH_LIMIT = 420.0
+ATMOSPHERE_ZONE_DEPTH_LIMIT = 980.0
 STARFIELD_COUNT = 36
 STARFIELD_RADIUS = 74.0
 NEBULA_COUNT = 4
@@ -177,7 +184,8 @@ def resolve_color(color_name: str) -> Color:
 
 def rgba_color(red: float, green: float, blue: float, alpha: float = 1.0) -> Color:
     """Create a color using Ursina's runtime rgba helper."""
-    rgba_factory = getattr(color_module, "rgba")  # noqa: B009  # B009: getattr-with-constant
+    # B009: getattr-with-constant; Ursina exposes color helpers dynamically.
+    rgba_factory = getattr(color_module, "rgba")  # noqa: B009
     return cast("Color", rgba_factory(red, green, blue, alpha))
 
 
@@ -207,8 +215,16 @@ def dominant_axis(primary: float, secondary: float) -> float:
     return primary if abs(primary) >= abs(secondary) else secondary
 
 
-def compute_keyboard_axes(held: dict[str, float]) -> tuple[float, float, float]:
-    """Map keyboard state to horizontal and fall-speed control axes."""
+def compute_keyboard_axes(
+    held: dict[str, float],
+) -> tuple[float, float, float, float]:
+    """Map keyboard state to movement, dive, and yaw-turn axes."""
+    keyboard_yaw_axis = (
+        held.get("e", 0.0)
+        + held.get("page down", 0.0)
+        - held.get("q", 0.0)
+        - held.get("page up", 0.0)
+    )
     x_axis = (
         held.get("right arrow", 0.0)
         + held.get("d", 0.0)
@@ -225,20 +241,20 @@ def compute_keyboard_axes(held: dict[str, float]) -> tuple[float, float, float]:
         held.get("left shift", 0.0),
         held.get("right shift", 0.0),
     )
-    return x_axis, z_axis, dive_axis
+    return x_axis, z_axis, dive_axis, keyboard_yaw_axis
 
 
 def compute_gamepad_axes(
     held: dict[str, float],
-) -> tuple[float, float, float, float, float]:
-    """Map gamepad sticks, triggers, and shoulders to gameplay axes."""
-    shoulder_axis = held.get("gamepad right shoulder", 0.0) - held.get(
+) -> tuple[float, float, float, float, float, float]:
+    """Map gamepad sticks/triggers and shoulders to control axes."""
+    shoulder_yaw_axis = held.get("gamepad right shoulder", 0.0) - held.get(
         "gamepad left shoulder",
         0.0,
     )
     stick_x = apply_deadzone(held.get("gamepad left stick x", 0.0))
     stick_y = apply_deadzone(held.get("gamepad left stick y", 0.0))
-    x_axis = dominant_axis(stick_x, shoulder_axis)
+    x_axis = stick_x
     z_axis = stick_y
     dive_axis = apply_deadzone(
         held.get("gamepad right trigger", 0.0) - held.get("gamepad left trigger", 0.0),
@@ -249,6 +265,7 @@ def compute_gamepad_axes(
         x_axis,
         z_axis,
         dive_axis,
+        shoulder_yaw_axis,
         look_x * GAMEPAD_LOOK_SENSITIVITY,
         look_y * GAMEPAD_LOOK_SENSITIVITY,
     )
@@ -257,16 +274,17 @@ def compute_gamepad_axes(
 def compute_control_axes(
     held: dict[str, float],
     mouse_velocity: Vec3,
-) -> tuple[float, float, float, Vec3]:
+) -> tuple[float, float, float, float, Vec3]:
     """Combine keyboard, gamepad, and mouse into one control vector set."""
-    keyboard_x, keyboard_z, keyboard_dive = compute_keyboard_axes(held)
-    gamepad_x, gamepad_z, gamepad_dive, gamepad_look_x, gamepad_look_y = (
+    keyboard_x, keyboard_z, keyboard_dive, keyboard_yaw = compute_keyboard_axes(held)
+    gamepad_x, gamepad_z, gamepad_dive, gamepad_yaw, gamepad_look_x, gamepad_look_y = (
         compute_gamepad_axes(held)
     )
     return (
         dominant_axis(keyboard_x, gamepad_x),
         dominant_axis(keyboard_z, gamepad_z),
         dominant_axis(keyboard_dive, gamepad_dive),
+        dominant_axis(keyboard_yaw, gamepad_yaw),
         Vec3(
             dominant_axis(mouse_velocity.x, gamepad_look_x),
             dominant_axis(mouse_velocity.y, gamepad_look_y),
@@ -610,7 +628,9 @@ def create_controls_hint() -> Text:
             "Steer: arrows or WASD\n"
             "Dive faster: space / R2\n"
             "Air brake: shift / L2\n"
-            "Pad steer: left stick + L1/R1\n"
+            "Rotate body: q/e or PgUp/PgDn\n"
+            "Pad rotate: L1/R1\n"
+            "Pad steer: left stick\n"
             "Look: mouse / right stick\n"
             "Zoom: mouse wheel / dpad up-down\n"
             "Pause: p / start\n"
@@ -834,7 +854,7 @@ def update_atmosphere_for_depth(
         ) % MOTION_MOTE_VERTICAL_SPAN
         mote.position = Vec3(
             player.x + (cos(angle) * radius),
-            player.y + 38.0 - travel,
+            player.y - 34.0 + travel,
             player.z + (sin(angle) * radius),
         )
         mote.rotation_y = (angle * 57.2958) + 90.0
@@ -895,15 +915,17 @@ def spawn_entity_from_blueprint(
     if blueprint.entity_kind == "coin":
         entity.unlit = True
         target_color = rgba_color(1.0, 0.95, 0.25, 1.0)
-        if variation_seed % 2 == 0:
+        is_high_value_coin = blueprint.score_value > COIN_SCORE_VALUE
+        if is_high_value_coin:
             Entity(
                 parent=entity,
                 name=f"{entity_name}_coin_halo",
                 model="sphere",
                 scale=Vec3(1.68, 1.68, 1.68),
-                color=rgba_color(1.0, 0.93, 0.3, 0.16),
+                color=rgba_color(1.0, 0.93, 0.3, 0.2),
                 unlit=True,
             )
+            target_color = rgba_color(1.0, 0.85, 0.2, 1.0)
         spin_speed = 0.0
         bob_amplitude = 0.08 + ((variation_seed % 4) * 0.03)
         bob_frequency = 2.5 + ((variation_seed % 5) * 0.36)
@@ -969,9 +991,8 @@ def trigger_impact_rumble(intensity: float) -> None:
 
 def play_sfx_clip(*, clip_name: str, volume: float, pitch: float) -> None:
     """Play one-shot sound effect with runtime-set volume and pitch."""
-    sound = Audio(clip_name, auto_destroy=True)
-    sound.volume = volume
-    sound.pitch = pitch
+    audio_factory: Any = Audio
+    audio_factory(clip_name, volume=volume, pitch=pitch, auto_destroy=True)
 
 
 def play_coin_pickup_sfx() -> None:
@@ -1019,7 +1040,8 @@ def resolve_sfx_path(
 
 
 def initialize_run_state(
-    run_state: FallingRunState, fall_settings: FallSettings
+    run_state: FallingRunState,
+    fall_settings: FallSettings,
 ) -> None:
     """Reset run-state values to initial defaults."""
     run_state.score = 0
@@ -1192,14 +1214,16 @@ def animate_spawned_objects(
             if spawned.bob_amplitude > 0.0:
                 spawned.entity.y = spawned.base_y + (
                     sin(
-                        (runtime_time * spawned.bob_frequency) + spawned.pulse_frequency
+                        (runtime_time * spawned.bob_frequency)
+                        + spawned.pulse_frequency,
                     )
                     * spawned.bob_amplitude
                 )
             if spawned.pulse_amplitude > 0.0:
                 pulse_scale = 1.0 + (
                     sin(
-                        (runtime_time * spawned.pulse_frequency) + spawned.bob_frequency
+                        (runtime_time * spawned.pulse_frequency)
+                        + spawned.bob_frequency,
                     )
                     * spawned.pulse_amplitude
                 )
@@ -1217,9 +1241,9 @@ def animate_spawned_objects(
 
 def depth_zone_label(depth: float) -> str:
     """Return a readable biome label for the current descent depth."""
-    if depth < 420.0:
+    if depth < SPACE_ZONE_DEPTH_LIMIT:
         return "Deep Space"
-    if depth < 980.0:
+    if depth < ATMOSPHERE_ZONE_DEPTH_LIMIT:
         return "Upper Atmosphere"
     return "Planetfall"
 
@@ -1276,6 +1300,7 @@ def apply_player_movement(
     x_axis: float,
     z_axis: float,
     dive_axis: float,
+    yaw_turn_axis: float,
     dt: float,
 ) -> float:
     """Move the player avatar and return effective vertical fall speed."""
@@ -1338,12 +1363,7 @@ def apply_player_movement(
         "float",
         lerp_exponential_decay(player.rotation_x, target_pitch, dt * 9.0),
     )
-    player.rotation_y = cast(
-        "float",
-        lerp_exponential_decay(
-            player.rotation_y, normalized_horizontal * 22.0, dt * 6.0
-        ),
-    )
+    player.rotation_y += yaw_turn_axis * movement_settings.yaw_turn_speed * dt
     return fall_speed
 
 
@@ -1361,7 +1381,7 @@ def install_game_controller(
 ) -> Entity:
     """Attach per-frame gameplay update and input handlers."""
     controller = Entity(name="fall_game_controller")
-    randomizer = Random(RUN_RANDOM_SEED)
+    randomizer = Random(RUN_RANDOM_SEED)  # noqa: S311  # nosec B311
     camera_state = CameraState(
         yaw_angle=0.0,
         pitch_angle=settings.camera.start_pitch,
@@ -1407,7 +1427,7 @@ def install_game_controller(
     def controller_update() -> None:
         held = cast("dict[str, float]", getattr(ursina, "held_keys", {}))
         mouse_velocity = cast("Vec3", getattr(mouse, "velocity", Vec3(0.0, 0.0, 0.0)))
-        x_axis, z_axis, dive_axis, look_velocity = compute_control_axes(
+        x_axis, z_axis, dive_axis, yaw_turn_axis, look_velocity = compute_control_axes(
             held,
             mouse_velocity,
         )
@@ -1427,6 +1447,9 @@ def install_game_controller(
             update_status_text(run_state, status_text)
             return
 
+        yaw_turn_delta = yaw_turn_axis * settings.movement.yaw_turn_speed * dt
+        camera_state.yaw_angle += yaw_turn_delta
+
         fall_speed = apply_player_movement(
             player=player,
             motion_state=motion_state,
@@ -1436,6 +1459,7 @@ def install_game_controller(
             x_axis=x_axis,
             z_axis=z_axis,
             dive_axis=dive_axis,
+            yaw_turn_axis=yaw_turn_axis,
             dt=dt,
         )
         run_state.deepest_y = min(run_state.deepest_y, player.y)

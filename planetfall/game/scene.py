@@ -19,6 +19,7 @@ LANE_POSITIONS = (
 )
 BAND_SPACING = 18.0
 COIN_SCORE_VALUE = 10
+HIGH_VALUE_COIN_SCORE_VALUE = 25
 MAX_COLLIDABLE_ABS = 6.0 * TUNNEL_WIDTH_SCALE
 DECOR_RING_RADIUS = 10.5 * TUNNEL_WIDTH_SCALE
 
@@ -65,16 +66,16 @@ def build_fall_band_blueprints(
     """Build one designed band with chained coins and structured obstacles."""
     blueprints: list[FallingBlueprint] = []
     blueprints.extend(
-        _decor_shards_blueprints(y_position=y_position, band_index=band_index)
+        _decor_shards_blueprints(y_position=y_position, band_index=band_index),
     )
     blueprints.extend(
-        _coin_chain_blueprints(y_position=y_position, band_index=band_index)
+        _coin_chain_blueprints(y_position=y_position, band_index=band_index),
     )
 
     pattern = band_index % 5
     if pattern == 0:
         blueprints.extend(
-            _gate_pattern_blueprints(y_position=y_position, band_index=band_index)
+            _gate_pattern_blueprints(y_position=y_position, band_index=band_index),
         )
     elif pattern == 1:
         blueprints.extend(
@@ -90,7 +91,7 @@ def build_fall_band_blueprints(
         )
     else:
         blueprints.extend(
-            _comet_pattern_blueprints(y_position=y_position, band_index=band_index)
+            _comet_pattern_blueprints(y_position=y_position, band_index=band_index),
         )
 
     if band_index % 7 == 0:
@@ -165,12 +166,14 @@ def _coin_blueprint(
     x_pos: float,
     y_pos: float,
     z_pos: float,
+    score_value: int = COIN_SCORE_VALUE,
+    color_name: str = "yellow",
 ) -> FallingBlueprint:
     return FallingBlueprint(
         name=name,
         entity_kind="coin",
         model="sphere",
-        color_name="yellow",
+        color_name=color_name,
         scale=Vec3(0.72, 0.72, 0.72),
         position=Vec3(
             _clamp_collidable_axis(x_pos),
@@ -178,7 +181,7 @@ def _coin_blueprint(
             _clamp_collidable_axis(z_pos),
         ),
         collision_radius=0.45,
-        score_value=COIN_SCORE_VALUE,
+        score_value=score_value,
     )
 
 
@@ -423,6 +426,8 @@ def _bonus_coin_arc_blueprints(
                 + (side_sign * ((2.0 + (index * 0.6)) * TUNNEL_WIDTH_SCALE)),
                 y_pos=y_position + 0.9,
                 z_pos=center.z + lift,
+                score_value=HIGH_VALUE_COIN_SCORE_VALUE,
+                color_name="gold",
             ),
         )
 
