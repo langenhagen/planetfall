@@ -1,14 +1,14 @@
-"""Command-line entrypoint for fooproj."""
+"""Command-line entrypoint for barproj."""
 
 import argparse
 
-from fooproj.game import run_game
-from fooproj.game.config import GameSettings
+from barproj.game import run_game
+from barproj.game.config import GameSettings
 
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI flags for runtime launch options."""
-    parser = argparse.ArgumentParser(description="Run the fooproj endless falling game")
+    parser = argparse.ArgumentParser(description="Run the barproj endless falling game")
     parser.add_argument(
         "--fullscreen",
         action="store_true",

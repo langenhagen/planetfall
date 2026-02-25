@@ -6,7 +6,7 @@ from unittest import TestCase
 
 from ursina import Vec3
 
-from fooproj.game.runtime import (
+from barproj.game.runtime import (
     MotionState,
     apply_deadzone,
     apply_obstacle_recovery,
@@ -18,6 +18,7 @@ from fooproj.game.runtime import (
     compute_smoothed_lateral_speed,
     compute_zoom_distance,
     dominant_axis,
+    rotate_planar_velocity_by_yaw,
     should_despawn_object,
     should_spawn_next_band,
 )
@@ -196,6 +197,28 @@ def test_clamp_to_play_area_limits_distance_from_center() -> None:
     x_pos, z_pos = clamp_to_play_area(10.0, 0.0, 8.2)
     CHECKER.assertEqual(x_pos, 8.2)
     CHECKER.assertEqual(z_pos, 0.0)
+
+
+def test_rotate_planar_velocity_by_yaw_identity_at_zero() -> None:
+    """Keep camera-relative movement unchanged at zero yaw."""
+    x_speed, z_speed = rotate_planar_velocity_by_yaw(
+        right_speed=2.0,
+        forward_speed=3.0,
+        yaw_degrees=0.0,
+    )
+    CHECKER.assertAlmostEqual(x_speed, 2.0, places=5)
+    CHECKER.assertAlmostEqual(z_speed, 3.0, places=5)
+
+
+def test_rotate_planar_velocity_by_yaw_rotates_ninety_degrees() -> None:
+    """Rotate camera-relative movement into world space at 90 degrees yaw."""
+    x_speed, z_speed = rotate_planar_velocity_by_yaw(
+        right_speed=2.0,
+        forward_speed=3.0,
+        yaw_degrees=90.0,
+    )
+    CHECKER.assertAlmostEqual(x_speed, 3.0, places=5)
+    CHECKER.assertAlmostEqual(z_speed, -2.0, places=5)
 
 
 def test_should_spawn_next_band_uses_ahead_window() -> None:

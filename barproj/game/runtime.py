@@ -3,7 +3,7 @@
 import importlib
 from contextlib import suppress
 from dataclasses import dataclass, field
-from math import cos, sin, tau
+from math import cos, radians, sin, tau
 from pathlib import Path
 from random import Random
 from time import monotonic
@@ -44,8 +44,11 @@ PLAYER_COLLISION_RADIUS = 0.95
 OBSTACLE_HIT_COOLDOWN_SECONDS = 0.45
 RUN_RANDOM_SEED = 20260224
 PLANET_APPROACH_DEPTH = 1600.0
-STARFIELD_COUNT = 48
+STARFIELD_COUNT = 36
 STARFIELD_RADIUS = 74.0
+NEBULA_COUNT = 4
+MOTION_MOTE_COUNT = 24
+MOTION_MOTE_VERTICAL_SPAN = 72.0
 ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets"
 SPACE_SKY_DIR = ASSETS_DIR / "NightSkyHDRI009_4K"
 SPACE_SKY_TEXTURE_CANDIDATES = (
@@ -110,6 +113,13 @@ class SpawnedObject:
     collision_radius: float
     score_value: int
     spin_speed: float = 0.0
+    rock_speed: float = 0.0
+    bob_amplitude: float = 0.0
+    bob_frequency: float = 0.0
+    pulse_amplitude: float = 0.0
+    pulse_frequency: float = 0.0
+    base_y: float = 0.0
+    base_scale: Vec3 = field(default_factory=lambda: Vec3(1.0, 1.0, 1.0))
 
 
 @dataclass(slots=True)
@@ -136,10 +146,21 @@ class LightingRig:
 
 @dataclass(frozen=True, slots=True)
 class BackdropState:
-    """Runtime references for starfield and planetfall backdrop entities."""
+    """Runtime references for sky, stars, and atmosphere ambience entities."""
 
     sky: Entity
     stars: tuple[Entity, ...]
+    nebulae: tuple[Entity, ...]
+    motion_motes: tuple[Entity, ...]
+    depth_overlay: Entity
+
+
+@dataclass(frozen=True, slots=True)
+class PlayerVisualState:
+    """Runtime references for player contrails and glow visuals."""
+
+    contrails: tuple[Entity, ...]
+    aura: Entity
 
 
 def resolve_color(color_name: str) -> Color:
@@ -259,6 +280,24 @@ def clamp_to_play_area(
 
     scale = play_area_radius / radial_distance
     return x_value * scale, z_value * scale
+
+
+def rotate_planar_velocity_by_yaw(
+    *,
+    right_speed: float,
+    forward_speed: float,
+    yaw_degrees: float,
+) -> tuple[float, float]:
+    """Convert camera-relative planar speed into world-space x/z speed."""
+    yaw_radians = radians(yaw_degrees)
+    right_x = cos(yaw_radians)
+    right_z = -sin(yaw_radians)
+    forward_x = sin(yaw_radians)
+    forward_z = cos(yaw_radians)
+    return (
+        (right_speed * right_x) + (forward_speed * forward_x),
+        (right_speed * right_z) + (forward_speed * forward_z),
+    )
 
 
 def lerp_scalar(start_value: float, end_value: float, factor: float) -> float:
@@ -453,6 +492,85 @@ def spawn_player_avatar() -> Entity:
     return avatar
 
 
+def create_player_visual_state(player: Entity) -> PlayerVisualState:
+    """Attach contrails and aura entities to enrich player visuals."""
+    aura = Entity(
+        parent=player,
+        name="player_plasma_aura",
+        model="sphere",
+        position=Vec3(0.0, -0.2, 0.0),
+        scale=Vec3(1.75, 1.95, 1.75),
+        color=rgba_color(0.3, 0.72, 1.0, 0.16),
+        unlit=True,
+    )
+    contrails = (
+        Entity(
+            parent=player,
+            name="player_contrail_left",
+            model="cube",
+            position=Vec3(-0.22, -1.45, -0.62),
+            scale=Vec3(0.1, 2.4, 0.1),
+            color=rgba_color(0.45, 0.89, 1.0, 0.28),
+            unlit=True,
+        ),
+        Entity(
+            parent=player,
+            name="player_contrail_right",
+            model="cube",
+            position=Vec3(0.22, -1.45, -0.62),
+            scale=Vec3(0.1, 2.4, 0.1),
+            color=rgba_color(0.45, 0.89, 1.0, 0.28),
+            unlit=True,
+        ),
+    )
+    return PlayerVisualState(contrails=contrails, aura=aura)
+
+
+def update_player_visual_state(
+    *,
+    player_visual_state: PlayerVisualState,
+    motion_state: MotionState,
+    fall_speed: float,
+) -> None:
+    """Animate player aura and contrails based on speed and steering."""
+    runtime_time = monotonic()
+    speed_factor = max(0.0, min(1.0, (fall_speed - 10.0) / 32.0))
+    lateral_factor = max(
+        0.0,
+        min(
+            1.0,
+            (abs(motion_state.horizontal_speed) + abs(motion_state.depth_speed)) / 26.0,
+        ),
+    )
+
+    aura_scale = lerp_scalar(1.65, 2.25, speed_factor)
+    player_visual_state.aura.scale = Vec3(aura_scale, aura_scale * 1.08, aura_scale)
+    player_visual_state.aura.color = rgba_color(
+        lerp_scalar(0.26, 0.62, speed_factor),
+        lerp_scalar(0.65, 0.86, speed_factor),
+        1.0,
+        lerp_scalar(0.12, 0.24, speed_factor),
+    )
+
+    trail_width = lerp_scalar(0.08, 0.14, speed_factor)
+    trail_length = lerp_scalar(1.9, 3.8, speed_factor)
+    for trail_index, contrail in enumerate(player_visual_state.contrails):
+        sway_sign = -1.0 if trail_index == 0 else 1.0
+        sway = sin((runtime_time * 7.4) + (trail_index * 1.7)) * 0.08
+        contrail.position = Vec3(
+            sway_sign * (0.2 + (lateral_factor * 0.06)),
+            -1.5 - (speed_factor * 0.16),
+            -0.62 + sway,
+        )
+        contrail.scale = Vec3(trail_width, trail_length, trail_width)
+        contrail.color = rgba_color(
+            lerp_scalar(0.38, 0.8, speed_factor),
+            lerp_scalar(0.74, 0.95, speed_factor),
+            1.0,
+            lerp_scalar(0.2, 0.52, speed_factor),
+        )
+
+
 def configure_camera() -> None:
     """Set up base camera parent and transform defaults."""
     camera.parent = scene
@@ -480,7 +598,7 @@ def create_controls_hint() -> Text:
     return Text(
         name="controls_hint_text",
         text=(
-            "Steer: arrows or WASD (up = up-screen)\n"
+            "Steer: arrows or WASD (camera-relative)\n"
             "Dive faster: space / R2\n"
             "Air brake: shift / L2\n"
             "Coin: pickup chime\n"
@@ -513,7 +631,7 @@ def create_status_text() -> Text:
 def configure_lighting(focus_entity: Entity) -> LightingRig:
     """Create one sun light and ambient fill with stable shadow bounds."""
     sun_direction = Vec3(0.75, -1.2, -0.45).normalized()
-    key_light = DirectionalLight(shadows=True, shadow_map_resolution=Vec2(3072, 3072))
+    key_light = DirectionalLight(shadows=True, shadow_map_resolution=Vec2(2048, 2048))
     key_light.color = color_module.white
     key_light.look_at(sun_direction)
 
@@ -547,7 +665,7 @@ def configure_lighting(focus_entity: Entity) -> LightingRig:
 
 
 def create_space_backdrop() -> BackdropState:
-    """Create stars and a sky backdrop for deep-space descent."""
+    """Create HDRI sky plus layered ambience for deep-space descent."""
     sky_module = importlib.import_module("ursina.prefabs.sky")
     sky_factory = cast("type[Entity]", sky_module.Sky)
     sky_texture_path = resolve_space_sky_texture_path()
@@ -555,28 +673,79 @@ def create_space_backdrop() -> BackdropState:
     if sky_texture_path is not None:
         sky_texture_name = str(sky_texture_path.relative_to(application.asset_folder))
         sky_entity.texture = sky_texture_name
+
     stars: list[Entity] = []
+    nebulae: list[Entity] = []
+    motion_motes: list[Entity] = []
 
     for star_index in range(STARFIELD_COUNT):
         angle = (tau / STARFIELD_COUNT) * star_index
-        radius = STARFIELD_RADIUS + ((star_index % 7) * 4.5)
-        star_y = 48.0 + ((star_index % 9) * 12.0)
+        radius = STARFIELD_RADIUS + ((star_index % 9) * 4.1)
+        star_y = 52.0 + ((star_index % 11) * 11.0)
         if star_index % 2:
-            star_y *= 0.55
+            star_y *= 0.57
+        star_size = 0.1 + ((star_index % 5) * 0.03)
         stars.append(
             Entity(
                 name=f"space_star_{star_index}",
                 model="sphere",
-                scale=Vec3(0.18, 0.18, 0.18),
+                scale=Vec3(star_size, star_size, star_size),
                 position=Vec3(cos(angle) * radius, star_y, sin(angle) * radius),
                 color=color_module.rgba(1.0, 1.0, 1.0, 1.0),
                 unlit=True,
             ),
         )
 
+    for nebula_index in range(NEBULA_COUNT):
+        angle = (tau / NEBULA_COUNT) * nebula_index
+        radius = 38.0 + (nebula_index * 6.0)
+        nebulae.append(
+            Entity(
+                name=f"space_nebula_{nebula_index}",
+                model="sphere",
+                position=Vec3(
+                    cos(angle) * radius,
+                    18.0 + (nebula_index * 5.0),
+                    sin(angle) * radius,
+                ),
+                scale=Vec3(
+                    20.0 + (nebula_index * 2.5),
+                    12.0 + nebula_index,
+                    20.0 + (nebula_index * 2.5),
+                ),
+                color=rgba_color(0.2, 0.33, 0.58, 0.07),
+                unlit=True,
+            ),
+        )
+
+    for mote_index in range(MOTION_MOTE_COUNT):
+        motion_motes.append(
+            Entity(
+                name=f"atmo_mote_{mote_index}",
+                model="cube",
+                position=Vec3(0.0, 0.0, 0.0),
+                scale=Vec3(0.06, 2.0, 0.06),
+                color=rgba_color(0.74, 0.92, 1.0, 0.2),
+                unlit=True,
+            ),
+        )
+
+    depth_overlay = Entity(
+        parent=camera.ui,
+        name="depth_color_overlay",
+        model="quad",
+        z=1.0,
+        scale=Vec2(2.2, 1.3),
+        color=rgba_color(0.04, 0.08, 0.18, 0.0),
+        unlit=True,
+    )
+
     return BackdropState(
         sky=sky_entity,
         stars=tuple(stars),
+        nebulae=tuple(nebulae),
+        motion_motes=tuple(motion_motes),
+        depth_overlay=depth_overlay,
     )
 
 
@@ -594,10 +763,12 @@ def update_atmosphere_for_depth(
     player: Entity,
     lighting_rig: LightingRig,
     backdrop_state: BackdropState,
+    fall_speed: float,
 ) -> None:
-    """Shift sky and light colors from cold space to high-atmosphere tones."""
+    """Shift sky, stars, and atmosphere effects while descending."""
     depth = max(0.0, -player.y)
     progress = max(0.0, min(1.0, depth / PLANET_APPROACH_DEPTH))
+    runtime_time = monotonic()
 
     backdrop_state.sky.color = lerp_rgb_color((7, 10, 24), (145, 186, 214), progress)
     lighting_rig.ambient_light.color = color_module.rgba(
@@ -614,8 +785,53 @@ def update_atmosphere_for_depth(
     )
 
     star_alpha = max(0.0, 1.0 - (progress * 1.35))
-    for star in backdrop_state.stars:
-        star.color = color_module.rgba(1.0, 1.0, 1.0, star_alpha)
+    for star_index, star in enumerate(backdrop_state.stars):
+        twinkle = 0.62 + (sin((runtime_time * 1.7) + (star_index * 0.57)) * 0.38)
+        star.color = color_module.rgba(1.0, 1.0, 1.0, max(0.0, star_alpha * twinkle))
+
+    for nebula_index, nebula in enumerate(backdrop_state.nebulae):
+        orbit_phase = (runtime_time * 0.06) + (nebula_index * 0.9)
+        orbit_radius = 40.0 + (nebula_index * 5.5)
+        nebula.x = player.x * 0.08 + (cos(orbit_phase) * orbit_radius)
+        nebula.y = 16.0 + (sin((runtime_time * 0.2) + nebula_index) * 6.0)
+        nebula.z = player.z * 0.08 + (sin(orbit_phase) * orbit_radius)
+        nebula.rotation_y = (runtime_time * (2.4 + nebula_index)) % 360.0
+        nebula.color = rgba_color(
+            lerp_scalar(0.18, 0.42, progress),
+            lerp_scalar(0.3, 0.5, progress),
+            lerp_scalar(0.55, 0.74, progress),
+            lerp_scalar(0.04, 0.14, progress),
+        )
+
+    speed_factor = max(0.0, min(1.0, (fall_speed - 12.0) / 34.0))
+    mote_thickness = lerp_scalar(0.05, 0.09, speed_factor)
+    mote_length = lerp_scalar(1.8, 3.6, speed_factor)
+    for mote_index, mote in enumerate(backdrop_state.motion_motes):
+        angle = ((mote_index / MOTION_MOTE_COUNT) * tau) + (runtime_time * 0.18)
+        radius = 7.4 + ((mote_index % 7) * 0.82)
+        travel = (
+            (runtime_time * max(10.0, fall_speed * 0.95)) + (mote_index * 3.7)
+        ) % MOTION_MOTE_VERTICAL_SPAN
+        mote.position = Vec3(
+            player.x + (cos(angle) * radius),
+            player.y + 38.0 - travel,
+            player.z + (sin(angle) * radius),
+        )
+        mote.rotation_y = (angle * 57.2958) + 90.0
+        mote.scale = Vec3(mote_thickness, mote_length, mote_thickness)
+        mote.color = rgba_color(
+            lerp_scalar(0.58, 0.92, progress),
+            lerp_scalar(0.75, 0.94, progress),
+            1.0,
+            lerp_scalar(0.08, 0.32, speed_factor),
+        )
+
+    backdrop_state.depth_overlay.color = rgba_color(
+        lerp_scalar(0.03, 0.16, progress),
+        lerp_scalar(0.08, 0.25, progress),
+        lerp_scalar(0.16, 0.38, progress),
+        lerp_scalar(0.02, 0.14, progress),
+    )
 
 
 def spawn_entity_from_blueprint(
@@ -642,17 +858,63 @@ def spawn_entity_from_blueprint(
             blueprint.position.z,
         ),
     )
+
+    variation_seed = (band_index * 41) + (blueprint_index * 17)
+    base_scale = Vec3(entity.scale.x, entity.scale.y, entity.scale.z)
+
+    spin_speed = 0.0
+    rock_speed = 0.0
+    bob_amplitude = 0.0
+    bob_frequency = 0.0
+    pulse_amplitude = 0.0
+    pulse_frequency = 0.0
+
     if blueprint.entity_kind == "coin":
         entity.unlit = True
+        entity.color = rgba_color(1.0, 0.95, 0.25, 1.0)
+        Entity(
+            parent=entity,
+            name=f"{entity_name}_coin_halo",
+            model="sphere",
+            scale=Vec3(1.75, 1.75, 1.75),
+            color=rgba_color(1.0, 0.92, 0.3, 0.2),
+            unlit=True,
+        )
+        spin_speed = 210.0 + ((variation_seed % 6) * 24.0)
+        bob_amplitude = 0.08 + ((variation_seed % 4) * 0.03)
+        bob_frequency = 2.5 + ((variation_seed % 5) * 0.36)
+        pulse_amplitude = 0.08 + ((variation_seed % 3) * 0.03)
+        pulse_frequency = 4.2 + ((variation_seed % 4) * 0.48)
     else:
         mark_lit_shadowed(entity)
+        if blueprint.entity_kind == "obstacle":
+            if variation_seed % 2 == 0:
+                Entity(
+                    parent=entity,
+                    name=f"{entity_name}_obstacle_glow",
+                    model=blueprint.model,
+                    scale=Vec3(1.2, 1.2, 1.2),
+                    color=rgba_color(1.0, 0.4, 0.2, 0.16),
+                    unlit=True,
+                )
+            spin_speed = 16.0 + ((variation_seed % 7) * 6.0)
+            rock_speed = -12.0 + ((variation_seed % 9) * 3.0)
+        else:
+            rock_speed = 6.0 + ((variation_seed % 5) * 2.5)
 
     return SpawnedObject(
         entity=entity,
         entity_kind=blueprint.entity_kind,
         collision_radius=blueprint.collision_radius,
         score_value=blueprint.score_value,
-        spin_speed=240.0 if blueprint.entity_kind == "coin" else 0.0,
+        spin_speed=spin_speed,
+        rock_speed=rock_speed,
+        bob_amplitude=bob_amplitude,
+        bob_frequency=bob_frequency,
+        pulse_amplitude=pulse_amplitude,
+        pulse_frequency=pulse_frequency,
+        base_y=entity.y,
+        base_scale=base_scale,
     )
 
 
@@ -669,6 +931,13 @@ def trigger_impact_rumble(intensity: float) -> None:
             )
 
 
+def play_sfx_clip(*, clip_name: str, volume: float, pitch: float) -> None:
+    """Play one-shot sound effect with runtime-set volume and pitch."""
+    sound = Audio(clip_name, auto_destroy=True)
+    sound.volume = volume
+    sound.pitch = pitch
+
+
 def play_coin_pickup_sfx() -> None:
     """Play the configured coin pickup sound effect."""
     with suppress(Exception):
@@ -677,13 +946,9 @@ def play_coin_pickup_sfx() -> None:
             fallback_pattern="coin*.ogg",
         )
         if coin_path is not None:
-            sound = Audio(coin_path, auto_destroy=True)
-            sound.volume = 0.7
-            sound.pitch = 1.0
+            play_sfx_clip(clip_name=coin_path.name, volume=0.7, pitch=1.0)
             return
-        sound = Audio("sine", auto_destroy=True)
-        sound.pitch = 2.0
-        sound.volume = 1.0
+        play_sfx_clip(clip_name="sine", volume=1.0, pitch=2.0)
 
 
 def play_obstacle_hit_sfx() -> None:
@@ -694,13 +959,9 @@ def play_obstacle_hit_sfx() -> None:
             fallback_pattern="*impact*.ogg",
         )
         if impact_path is not None:
-            sound = Audio(impact_path, auto_destroy=True)
-            sound.volume = 0.75
-            sound.pitch = 1.0
+            play_sfx_clip(clip_name=impact_path.name, volume=0.75, pitch=1.0)
             return
-        sound = Audio("sine", auto_destroy=True)
-        sound.pitch = 1.0
-        sound.volume = 1.0
+        play_sfx_clip(clip_name="sine", volume=1.0, pitch=1.0)
 
 
 def resolve_sfx_path(
@@ -854,12 +1115,42 @@ def process_collisions(
     run_state.spawned_objects = survivors
 
 
-def spin_coin_entities(run_state: FallingRunState, dt: float) -> None:
-    """Apply simple spin animation to collectible orbs."""
+def animate_spawned_objects(
+    run_state: FallingRunState,
+    dt: float,
+    player_y: float,
+) -> None:
+    """Animate collectibles and obstacles for richer motion language."""
+    runtime_time = monotonic()
     for spawned in run_state.spawned_objects:
-        if spawned.entity_kind != "coin":
+        if abs(spawned.entity.y - player_y) > 85.0:
             continue
+
+        if spawned.entity_kind == "coin":
+            spawned.entity.rotation_y += spawned.spin_speed * dt
+            if spawned.bob_amplitude > 0.0:
+                spawned.entity.y = spawned.base_y + (
+                    sin(
+                        (runtime_time * spawned.bob_frequency) + spawned.pulse_frequency
+                    )
+                    * spawned.bob_amplitude
+                )
+            if spawned.pulse_amplitude > 0.0:
+                pulse_scale = 1.0 + (
+                    sin(
+                        (runtime_time * spawned.pulse_frequency) + spawned.bob_frequency
+                    )
+                    * spawned.pulse_amplitude
+                )
+                spawned.entity.scale = Vec3(
+                    spawned.base_scale.x * pulse_scale,
+                    spawned.base_scale.y * pulse_scale,
+                    spawned.base_scale.z * pulse_scale,
+                )
+            continue
+
         spawned.entity.rotation_y += spawned.spin_speed * dt
+        spawned.entity.rotation_x += spawned.rock_speed * dt
 
 
 def depth_zone_label(depth: float) -> str:
@@ -918,6 +1209,7 @@ def apply_player_movement(
     motion_state: MotionState,
     movement_settings: MovementSettings,
     fall_settings: FallSettings,
+    camera_yaw_degrees: float,
     x_axis: float,
     z_axis: float,
     dive_axis: float,
@@ -948,9 +1240,15 @@ def apply_player_movement(
         dt=dt,
     )
 
+    world_x_speed, world_z_speed = rotate_planar_velocity_by_yaw(
+        right_speed=motion_state.horizontal_speed,
+        forward_speed=motion_state.depth_speed,
+        yaw_degrees=camera_yaw_degrees,
+    )
+
     player.y -= fall_speed * dt
-    player.x += motion_state.horizontal_speed * dt
-    player.z += motion_state.depth_speed * dt
+    player.x += world_x_speed * dt
+    player.z += world_z_speed * dt
     player.x, player.z = clamp_to_play_area(
         player.x,
         player.z,
@@ -993,6 +1291,7 @@ def install_game_controller(
     settings: GameSettings,
     lighting_rig: LightingRig,
     backdrop_state: BackdropState,
+    player_visual_state: PlayerVisualState,
     controls_hint: Text,
     status_text: Text,
 ) -> Entity:
@@ -1029,6 +1328,12 @@ def install_game_controller(
             player=player,
             lighting_rig=lighting_rig,
             backdrop_state=backdrop_state,
+            fall_speed=settings.fall.base_speed,
+        )
+        update_player_visual_state(
+            player_visual_state=player_visual_state,
+            motion_state=motion_state,
+            fall_speed=settings.fall.base_speed,
         )
         update_status_text(run_state, status_text)
 
@@ -1053,11 +1358,12 @@ def install_game_controller(
             )
             return
 
-        apply_player_movement(
+        fall_speed = apply_player_movement(
             player=player,
             motion_state=motion_state,
             movement_settings=settings.movement,
             fall_settings=settings.fall,
+            camera_yaw_degrees=camera_state.yaw_angle,
             x_axis=x_axis,
             z_axis=z_axis,
             dive_axis=dive_axis,
@@ -1071,7 +1377,7 @@ def install_game_controller(
             rng=randomizer,
             fall_settings=settings.fall,
         )
-        spin_coin_entities(run_state, dt)
+        animate_spawned_objects(run_state, dt, player.y)
         process_collisions(
             player=player,
             motion_state=motion_state,
@@ -1095,6 +1401,12 @@ def install_game_controller(
             player=player,
             lighting_rig=lighting_rig,
             backdrop_state=backdrop_state,
+            fall_speed=fall_speed,
+        )
+        update_player_visual_state(
+            player_visual_state=player_visual_state,
+            motion_state=motion_state,
+            fall_speed=fall_speed,
         )
         update_status_text(run_state, status_text)
 
@@ -1140,6 +1452,7 @@ def run_game(settings: GameSettings | None = None) -> None:
     configure_window(active_settings)
 
     player = spawn_player_avatar()
+    player_visual_state = create_player_visual_state(player)
     configure_camera()
     orbit_rig = create_camera_orbit_rig(active_settings)
     configure_mouse_capture()
@@ -1153,6 +1466,7 @@ def run_game(settings: GameSettings | None = None) -> None:
         settings=active_settings,
         lighting_rig=lighting_rig,
         backdrop_state=backdrop_state,
+        player_visual_state=player_visual_state,
         controls_hint=controls_hint,
         status_text=status_text,
     )

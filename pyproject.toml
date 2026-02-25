@@ -1,5 +1,5 @@
 [project]
-name = "fooproj"
+name = "barproj"
 version = "0.1.0"
 description = "Python boilerplate powered by uv and pyenv"
 readme = "README.md"
@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-fooproj = "fooproj.cli:main"
+barproj = "barproj.cli:main"
 
 [dependency-groups]
 dev = [
@@ -32,6 +32,9 @@ lint = [
 [build-system]
 requires = ["hatchling>=1.27.0"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["barproj"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -96,7 +99,7 @@ profile = "black"
 [tool.mypy]
 python_version = "3.14"
 strict = true
-packages = ["fooproj"]
+packages = ["barproj"]
 explicit_package_bases = false
 
 [[tool.mypy.overrides]]

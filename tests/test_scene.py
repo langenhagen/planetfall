@@ -3,7 +3,7 @@
 from random import Random
 from unittest import TestCase
 
-from fooproj.game.scene import (
+from barproj.game.scene import (
     BAND_SPACING,
     LANE_POSITIONS,
     band_y_position,

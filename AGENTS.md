@@ -26,7 +26,7 @@ Practical guidance for humans and coding agents working in this repository.
 
 ## Repo Layout
 
-- `fooproj/`: application package.
+- `barproj/`: application package.
 - `tests/`: unit and integration tests.
 - `pyproject.toml`: project metadata and tool configuration.
 - `.python-version`: pinned Python version for `pyenv`.
@@ -36,7 +36,7 @@ Practical guidance for humans and coding agents working in this repository.
 Prefer repo-local, reproducible commands:
 
 - Sync dependencies: `uv sync`.
-- Run app entrypoint (game): `uv run fooproj`.
+- Run app entrypoint (game): `uv run barproj`.
 - Consider using `scripts/debug-startup.sh` and then inspecting `__debug/out.log` to spot startup issues and logs quickly.
 - For visual debugging and reproducible gameplay checks, use:
   - `scripts/capture-game.sh` for timestamped run folders under `__debug/`
@@ -46,14 +46,14 @@ Prefer repo-local, reproducible commands:
 - Run tests: `uv run pytest`.
 - Run linter: `uv run ruff check .`.
 - Format code: `uv run ruff format .`.
-- Run type checks: `uv run mypy fooproj`.
+- Run type checks: `uv run mypy barproj`.
 - Run TOML checks/formatting: `taplo check .` and `taplo fmt .`.
 - Install hooks: `uv run pre-commit install`.
 - Run hooks manually: `uv run pre-commit run --all-files`.
 - For shell scripts, run:
   - `shellcheck -x --exclude SC2059 <path/to/script.sh>`
   - `shfmt --indent 4 --write <path/to/script.sh>`
-- Optional extended lint checks: `uv run --group lint pylint fooproj tests`.
+- Optional extended lint checks: `uv run --group lint pylint barproj tests`.
 - Optional personal lint sweep: `source .venv/bin/activate && l3`.
 - Optional personal autofix pass: `source .venv/bin/activate && rf`.
 - You can scope those tools to one file when iterating quickly:

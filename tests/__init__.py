@@ -1,1 +1,1 @@
-"""Test package for fooproj."""
+"""Test package for barproj."""

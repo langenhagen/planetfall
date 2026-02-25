@@ -1,4 +1,4 @@
-"""fooproj package."""
+"""barproj package."""
 
 __all__ = ["main", "run_game"]
 

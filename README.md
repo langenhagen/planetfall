@@ -16,12 +16,12 @@ obstacles, and collects chained glowing orbs while descending.
 pyenv install -s 3.14.3
 pyenv local 3.14.3
 uv sync
-uv run fooproj
+uv run barproj
 ```
 
 ## Controls
 
-- Arrow keys or `WASD`: steer while falling (`Up`/`W` move up-screen)
+- Arrow keys or `WASD`: steer while falling (camera-relative)
 - `Space`: dive faster
 - Left Shift / Right Shift: air brake
 - Obstacle hit: rumble + reset a bit higher (no death)
@@ -54,12 +54,12 @@ pyenv local 3.14.3
 uv sync
 
 # launch the Ursina game
-uv run fooproj
+uv run barproj
 
 # run quality checks
 uv run ruff check .
 uv run ruff format .
-uv run mypy fooproj
+uv run mypy barproj
 uv run pytest
 
 # install git hooks
@@ -99,7 +99,7 @@ fall scenarios and visual debugging.
 
 ## Project Layout
 
-- `fooproj/`: application package and CLI entrypoint
-- `fooproj/game/`: runtime, control logic, procedural falling-scene generation
+- `barproj/`: application package and CLI entrypoint
+- `barproj/game/`: runtime, control logic, procedural falling-scene generation
 - `tests/`: test suite
 - `pyproject.toml`: project metadata and tool/lint configuration
