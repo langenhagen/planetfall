@@ -1,7 +1,7 @@
 # Planetfall
 
 A largely vibe coded third-person endless falling game built with Ursina and Python,
-similar to the memorable parts from LEGO City Undercover
+similar to the memorable parts from LEGO City Undercover.
 
 The player dives from deep space toward a distant planet, steers around
 obstacles, and collects chained glowing orbs while descending.
