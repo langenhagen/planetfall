@@ -12,6 +12,7 @@ Practical guidance for humans and coding agents working in this repository.
   so scene structure is easy to inspect and debug.
 - Avoid over-engineering: prefer the simplest solution that keeps behavior
   clear, maintainable, and testable.
+- Prefer smaller, modular files over monolithic files when adding or refactoring code.
 - Capitalize Markdown headlines (prefer Title Case).
 
 ## Project Stack
