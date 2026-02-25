@@ -23,6 +23,7 @@ Practical guidance for humans and coding agents working in this repository.
 - Test framework: `pytest`.
 - Lint/format: `ruff`.
 - Type checking: `mypy`.
+- Security/static scan: `semgrep`.
 
 ## Repo Layout
 
@@ -45,6 +46,7 @@ Prefer repo-local, reproducible commands:
   - `xdotool` in conjunction with capture scripts to automate mouse and keyboard input scenarios while collecting screenshots/logs.
 - Run tests: `uv run pytest`.
 - Run linter: `uv run ruff check .`.
+- Run security scan: `uv run --group lint semgrep --config=p/ci --error --metrics=off planetfall tests`.
 - Format code: `uv run ruff format .`.
 - Run type checks: `uv run mypy planetfall`.
 - Run TOML checks/formatting: `taplo check .` and `taplo fmt .`.
