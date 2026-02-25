@@ -92,6 +92,11 @@ Interpret these tokens as explicit workflow commands:
   - Do not use prefixes like `fix:`, `feat:`, `chore:`.
   - Include both the commit message and a prose walkthrough of what changed and why.
 
+- `bigcheck` or `big check`
+  - Run and act on this full local sweep:
+    - `source .venv/bin/activate; rf; l3; pre-commit run --all; pytest`
+  - Treat failures as actionable, fix them, and re-run until green when feasible.
+
 ## Commit Workflow Expectations
 
 When asked to commit:
