@@ -22,6 +22,11 @@ COIN_SCORE_VALUE = 10
 HIGH_VALUE_COIN_SCORE_VALUE = 25
 MAX_COLLIDABLE_ABS = 6.0 * TUNNEL_WIDTH_SCALE
 DECOR_RING_RADIUS = 10.5 * TUNNEL_WIDTH_SCALE
+PATTERN_CHICANE = 2
+PATTERN_RING_GAP = 3
+PATH_DIRECTION_EPSILON = 1e-4
+RING_GAP_ANGLE_THRESHOLD = 0.52
+BONUS_ARC_SIDE_SPLIT = 0.5
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,11 +86,11 @@ def build_fall_band_blueprints(
         blueprints.extend(
             _slalom_pattern_blueprints(y_position=y_position, band_index=band_index),
         )
-    elif pattern == 2:
+    elif pattern == PATTERN_CHICANE:
         blueprints.extend(
             _chicane_pattern_blueprints(y_position=y_position, band_index=band_index),
         )
-    elif pattern == 3:
+    elif pattern == PATTERN_RING_GAP:
         blueprints.extend(
             _ring_gap_pattern_blueprints(y_position=y_position, band_index=band_index),
         )
@@ -118,7 +123,7 @@ def _path_direction(band_index: int) -> Vec3:
     delta_x = next_point.x - previous_point.x
     delta_z = next_point.z - previous_point.z
     length = sqrt((delta_x * delta_x) + (delta_z * delta_z))
-    if length <= 0.0001:
+    if length <= PATH_DIRECTION_EPSILON:
         return Vec3(1.0, 0.0, 0.0)
     return Vec3(delta_x / length, 0.0, delta_z / length)
 
@@ -367,7 +372,7 @@ def _ring_gap_pattern_blueprints(
 
     for index in range(10):
         angle = (tau / 10.0) * index
-        if _angular_distance(angle, gap_angle) < 0.52:
+        if _angular_distance(angle, gap_angle) < RING_GAP_ANGLE_THRESHOLD:
             continue
         blueprints.append(
             _obstacle_blueprint(
@@ -414,7 +419,7 @@ def _bonus_coin_arc_blueprints(
     rng: Random,
 ) -> tuple[FallingBlueprint, ...]:
     center = _path_center(band_index)
-    side_sign = -1.0 if rng.random() < 0.5 else 1.0
+    side_sign = -1.0 if rng.random() < BONUS_ARC_SIDE_SPLIT else 1.0
     blueprints: list[FallingBlueprint] = []
 
     for index in range(3):

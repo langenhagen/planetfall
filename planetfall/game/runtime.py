@@ -758,17 +758,17 @@ def create_space_backdrop() -> BackdropState:
             ),
         )
 
-    for mote_index in range(MOTION_MOTE_COUNT):
-        motion_motes.append(
-            Entity(
-                name=f"atmo_mote_{mote_index}",
-                model="cube",
-                position=Vec3(0.0, 0.0, 0.0),
-                scale=Vec3(0.06, 2.0, 0.06),
-                color=rgba_color(0.74, 0.92, 1.0, 0.2),
-                unlit=True,
-            ),
+    motion_motes = [
+        Entity(
+            name=f"atmo_mote_{mote_index}",
+            model="cube",
+            position=Vec3(0.0, 0.0, 0.0),
+            scale=Vec3(0.06, 2.0, 0.06),
+            color=rgba_color(0.74, 0.92, 1.0, 0.2),
+            unlit=True,
         )
+        for mote_index in range(MOTION_MOTE_COUNT)
+    ]
 
     depth_overlay = Entity(
         parent=camera.ui,
