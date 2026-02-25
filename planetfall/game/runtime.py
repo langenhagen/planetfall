@@ -8,7 +8,7 @@ from math import cos, sin, tau
 from pathlib import Path
 from random import Random
 from time import monotonic
-from typing import TYPE_CHECKING, Any, Callable, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import ursina
 import ursina.color as color_module
@@ -190,6 +190,13 @@ class PlayerVisualState:
 
     contrails: tuple[Entity, ...]
     aura: Entity
+
+
+class GamepadVibrateCallable(Protocol):
+    """Callable protocol for Ursina's optional gamepad vibrate hook."""
+
+    def __call__(self, **_kwargs: float) -> object:
+        """Trigger gamepad vibration with motor intensities and duration."""
 
 
 @lru_cache(maxsize=32)
@@ -737,7 +744,7 @@ def trigger_impact_rumble(intensity: float) -> None:
 
 
 @lru_cache(maxsize=1)
-def resolve_gamepad_vibrate_callable() -> Callable[..., object] | None:
+def resolve_gamepad_vibrate_callable() -> GamepadVibrateCallable | None:
     """Resolve and cache the optional Ursina gamepad vibrate callable."""
     with suppress(Exception):
         gamepad_module = importlib.import_module("ursina.gamepad")
@@ -745,7 +752,7 @@ def resolve_gamepad_vibrate_callable() -> Callable[..., object] | None:
             return None
         vibrate = gamepad_module.vibrate
         if callable(vibrate):
-            return cast("Callable[..., object]", vibrate)
+            return cast("GamepadVibrateCallable", vibrate)
     return None
 
 
