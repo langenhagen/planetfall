@@ -598,11 +598,9 @@ def create_controls_hint() -> Text:
     return Text(
         name="controls_hint_text",
         text=(
-            "Steer: arrows or WASD (camera-relative)\n"
+            "Steer: arrows or WASD\n"
             "Dive faster: space / R2\n"
             "Air brake: shift / L2\n"
-            "Coin: pickup chime\n"
-            "Hit obstacle: thud + rumble + altitude reset\n"
             "Pad steer: left stick + L1/R1\n"
             "Look: mouse / right stick\n"
             "Zoom: mouse wheel / dpad up-down\n"

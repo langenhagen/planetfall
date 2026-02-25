@@ -21,7 +21,7 @@ uv run barproj
 
 ## Controls
 
-- Arrow keys or `WASD`: steer while falling (camera-relative)
+- Arrow keys or `WASD`: steer while falling
 - `Space`: dive faster
 - Left Shift / Right Shift: air brake
 - Obstacle hit: rumble + reset a bit higher (no death)
