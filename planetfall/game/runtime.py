@@ -3,7 +3,7 @@
 import importlib
 from contextlib import suppress
 from dataclasses import dataclass, field
-from math import cos, radians, sin, tau
+from math import cos, sin, tau
 from pathlib import Path
 from random import Random
 from time import monotonic
@@ -31,6 +31,24 @@ from ursina import (
 from ursina.main import Ursina
 
 from .config import CameraSettings, FallSettings, GameSettings, MovementSettings
+from .runtime_controls import (
+    clamp_to_play_area,
+    compute_control_axes,
+    compute_fall_speed,
+    compute_look_angles,
+    compute_smoothed_lateral_speed,
+    compute_zoom_distance,
+    lerp_scalar,
+    rotate_planar_velocity_by_yaw,
+    should_despawn_object,
+    should_spawn_next_band,
+)
+from .runtime_ui import (
+    create_controls_hint,
+    create_pause_text,
+    create_status_text,
+    update_status_text,
+)
 from .scene import (
     BAND_SPACING,
     COIN_SCORE_VALUE,
@@ -43,14 +61,10 @@ if TYPE_CHECKING:
 
 
 LIT_SHADER = cast("object", ursina_shaders.lit_with_shadows_shader)
-GAMEPAD_DEADZONE = 0.08
-GAMEPAD_LOOK_SENSITIVITY = 0.012
 PLAYER_COLLISION_RADIUS = 0.95
 OBSTACLE_HIT_COOLDOWN_SECONDS = 0.45
 RUN_RANDOM_SEED = 20260224
 PLANET_APPROACH_DEPTH = 1600.0
-SPACE_ZONE_DEPTH_LIMIT = 420.0
-ATMOSPHERE_ZONE_DEPTH_LIMIT = 980.0
 STARFIELD_COUNT = 36
 STARFIELD_RADIUS = 74.0
 NEBULA_COUNT = 4
@@ -203,133 +217,6 @@ def get_frame_dt() -> float:
     return cast("float", getattr(getattr(ursina, "time"), "dt", 0.0))  # noqa: B009
 
 
-def apply_deadzone(value: float, deadzone: float = GAMEPAD_DEADZONE) -> float:
-    """Clamp tiny analog controller drift to zero."""
-    if abs(value) < deadzone:
-        return 0.0
-    return value
-
-
-def dominant_axis(primary: float, secondary: float) -> float:
-    """Return the stronger of two axis sources by absolute value."""
-    return primary if abs(primary) >= abs(secondary) else secondary
-
-
-def compute_keyboard_axes(
-    held: dict[str, float],
-) -> tuple[float, float, float, float]:
-    """Map keyboard state to movement, dive, and yaw-turn axes."""
-    keyboard_yaw_axis = (
-        held.get("e", 0.0)
-        + held.get("page down", 0.0)
-        - held.get("q", 0.0)
-        - held.get("page up", 0.0)
-    )
-    x_axis = (
-        held.get("right arrow", 0.0)
-        + held.get("d", 0.0)
-        - held.get("left arrow", 0.0)
-        - held.get("a", 0.0)
-    )
-    z_axis = (
-        held.get("up arrow", 0.0)
-        + held.get("w", 0.0)
-        - held.get("down arrow", 0.0)
-        - held.get("s", 0.0)
-    )
-    dive_axis = held.get("space", 0.0) - max(
-        held.get("left shift", 0.0),
-        held.get("right shift", 0.0),
-    )
-    return x_axis, z_axis, dive_axis, keyboard_yaw_axis
-
-
-def compute_gamepad_axes(
-    held: dict[str, float],
-) -> tuple[float, float, float, float, float, float]:
-    """Map gamepad sticks/triggers and shoulders to control axes."""
-    shoulder_yaw_axis = held.get("gamepad right shoulder", 0.0) - held.get(
-        "gamepad left shoulder",
-        0.0,
-    )
-    stick_x = apply_deadzone(held.get("gamepad left stick x", 0.0))
-    stick_y = apply_deadzone(held.get("gamepad left stick y", 0.0))
-    x_axis = stick_x
-    z_axis = stick_y
-    dive_axis = apply_deadzone(
-        held.get("gamepad right trigger", 0.0) - held.get("gamepad left trigger", 0.0),
-    )
-    look_x = apply_deadzone(held.get("gamepad right stick x", 0.0))
-    look_y = apply_deadzone(held.get("gamepad right stick y", 0.0))
-    return (
-        x_axis,
-        z_axis,
-        dive_axis,
-        shoulder_yaw_axis,
-        look_x * GAMEPAD_LOOK_SENSITIVITY,
-        look_y * GAMEPAD_LOOK_SENSITIVITY,
-    )
-
-
-def compute_control_axes(
-    held: dict[str, float],
-    mouse_velocity: Vec3,
-) -> tuple[float, float, float, float, Vec3]:
-    """Combine keyboard, gamepad, and mouse into one control vector set."""
-    keyboard_x, keyboard_z, keyboard_dive, keyboard_yaw = compute_keyboard_axes(held)
-    gamepad_x, gamepad_z, gamepad_dive, gamepad_yaw, gamepad_look_x, gamepad_look_y = (
-        compute_gamepad_axes(held)
-    )
-    return (
-        dominant_axis(keyboard_x, gamepad_x),
-        dominant_axis(keyboard_z, gamepad_z),
-        dominant_axis(keyboard_dive, gamepad_dive),
-        dominant_axis(keyboard_yaw, gamepad_yaw),
-        Vec3(
-            dominant_axis(mouse_velocity.x, gamepad_look_x),
-            dominant_axis(mouse_velocity.y, gamepad_look_y),
-            0.0,
-        ),
-    )
-
-
-def clamp_to_play_area(
-    x_value: float,
-    z_value: float,
-    play_area_radius: float,
-) -> tuple[float, float]:
-    """Clamp x/z movement to a circular play area."""
-    radial_distance = (x_value**2 + z_value**2) ** 0.5
-    if radial_distance <= play_area_radius or radial_distance == 0.0:
-        return x_value, z_value
-
-    scale = play_area_radius / radial_distance
-    return x_value * scale, z_value * scale
-
-
-def rotate_planar_velocity_by_yaw(
-    *,
-    right_speed: float,
-    forward_speed: float,
-    yaw_degrees: float,
-) -> tuple[float, float]:
-    """Convert camera-relative planar speed into world-space x/z speed."""
-    yaw_radians = radians(yaw_degrees)
-    right_x = cos(yaw_radians)
-    right_z = -sin(yaw_radians)
-    forward_x = sin(yaw_radians)
-    forward_z = cos(yaw_radians)
-    return (
-        (right_speed * right_x) + (forward_speed * forward_x),
-        (right_speed * right_z) + (forward_speed * forward_z),
-    )
-
-
-def lerp_scalar(start_value: float, end_value: float, factor: float) -> float:
-    """Linearly interpolate between two scalar values."""
-    return start_value + ((end_value - start_value) * factor)
-
-
 def lerp_rgb_color(
     start_rgb: tuple[int, int, int],
     end_rgb: tuple[int, int, int],
@@ -341,100 +228,6 @@ def lerp_rgb_color(
     green = round(lerp_scalar(float(start_rgb[1]), float(end_rgb[1]), clamped_factor))
     blue = round(lerp_scalar(float(start_rgb[2]), float(end_rgb[2]), clamped_factor))
     return rgba_color(red / 255.0, green / 255.0, blue / 255.0, 1.0)
-
-
-def compute_smoothed_lateral_speed(
-    *,
-    current_speed: float,
-    axis_input: float,
-    max_speed: float,
-    acceleration_rate: float,
-    deceleration_rate: float,
-    dt: float,
-) -> float:
-    """Smooth horizontal speed changes for gentle acceleration/deceleration."""
-    if dt <= 0.0:
-        return current_speed
-
-    target_speed = axis_input * max_speed
-    if target_speed == 0.0:
-        response_rate = deceleration_rate
-    elif abs(target_speed) > abs(current_speed):
-        response_rate = acceleration_rate
-    else:
-        response_rate = deceleration_rate
-
-    if target_speed != 0.0 and (target_speed * current_speed) < 0.0:
-        response_rate = max(response_rate, deceleration_rate * 1.25)
-
-    return cast(
-        "float",
-        lerp_exponential_decay(current_speed, target_speed, dt * response_rate),
-    )
-
-
-def compute_fall_speed(
-    *,
-    base_speed: float,
-    dive_axis: float,
-    boost_multiplier: float,
-    brake_multiplier: float,
-) -> float:
-    """Compute effective fall speed from dive and brake input."""
-    if dive_axis >= 0.0:
-        return base_speed * (1.0 + (dive_axis * boost_multiplier))
-
-    speed = base_speed * (1.0 + (dive_axis * brake_multiplier))
-    return max(base_speed * 0.2, speed)
-
-
-def compute_look_angles(
-    *,
-    yaw_angle: float,
-    pitch_angle: float,
-    look_velocity: Vec3,
-    mouse_look_speed: float,
-    min_pitch: float,
-    max_pitch: float,
-) -> tuple[float, float]:
-    """Update camera yaw/pitch from look input and clamp pitch limits."""
-    next_yaw = yaw_angle + (look_velocity.x * mouse_look_speed)
-    next_pitch = pitch_angle + (look_velocity.y * mouse_look_speed)
-    next_pitch = max(min_pitch, min(max_pitch, next_pitch))
-    return next_yaw, next_pitch
-
-
-def compute_zoom_distance(
-    *,
-    current_distance: float,
-    scroll_direction: int,
-    min_distance: float,
-    max_distance: float,
-    zoom_step: float,
-) -> float:
-    """Adjust and clamp camera zoom distance from scroll input."""
-    next_distance = current_distance - (scroll_direction * zoom_step)
-    return max(min_distance, min(max_distance, next_distance))
-
-
-def should_spawn_next_band(
-    *,
-    next_band_y: float,
-    player_y: float,
-    spawn_ahead_distance: float,
-) -> bool:
-    """Return whether more content should be spawned below the player."""
-    return next_band_y > (player_y - spawn_ahead_distance)
-
-
-def should_despawn_object(
-    *,
-    object_y: float,
-    player_y: float,
-    cleanup_above_distance: float,
-) -> bool:
-    """Return whether an entity is far above the player and should be removed."""
-    return object_y > (player_y + cleanup_above_distance)
 
 
 def configure_window(settings: GameSettings) -> None:
@@ -618,54 +411,6 @@ def configure_mouse_capture() -> None:
     """Capture the mouse cursor for camera look controls."""
     mouse.locked = True
     mouse.visible = False
-
-
-def create_controls_hint() -> Text:
-    """Render controls help text and return its entity."""
-    return Text(
-        name="controls_hint_text",
-        text=(
-            "Steer: arrows or WASD\n"
-            "Dive faster: space / R2\n"
-            "Air brake: shift / L2\n"
-            "Rotate body: q/e or PgUp/PgDn\n"
-            "Pad rotate: L1/R1\n"
-            "Pad steer: left stick\n"
-            "Look: mouse / right stick\n"
-            "Zoom: mouse wheel / dpad up-down\n"
-            "Pause: p / start\n"
-            "Recenter: c / dpad left\n"
-            "Restart: r\n"
-            "UI: u"
-        ),
-        x=-0.86,
-        y=0.47,
-        scale=0.9,
-        background=True,
-    )
-
-
-def create_status_text() -> Text:
-    """Create top-right run status text entity."""
-    return Text(
-        name="run_status_text",
-        text="",
-        x=0.56,
-        y=0.45,
-        scale=1.05,
-    )
-
-
-def create_pause_text() -> Text:
-    """Create pause overlay text shown when gameplay is paused."""
-    return Text(
-        name="pause_text",
-        text="Paused\nPress P or Start",
-        origin=(0.0, 0.0),
-        scale=2.1,
-        background=True,
-        enabled=False,
-    )
 
 
 def configure_lighting(focus_entity: Entity) -> LightingRig:
@@ -1237,27 +982,6 @@ def animate_spawned_objects(
         if not is_sphere_model:
             spawned.entity.rotation_y += spawned.spin_speed * dt
             spawned.entity.rotation_x += spawned.rock_speed * dt
-
-
-def depth_zone_label(depth: float) -> str:
-    """Return a readable biome label for the current descent depth."""
-    if depth < SPACE_ZONE_DEPTH_LIMIT:
-        return "Deep Space"
-    if depth < ATMOSPHERE_ZONE_DEPTH_LIMIT:
-        return "Upper Atmosphere"
-    return "Planetfall"
-
-
-def update_status_text(run_state: FallingRunState, status_text: Text) -> None:
-    """Render current score, depth, and reset count into the HUD."""
-    depth = max(0.0, -run_state.deepest_y)
-    status_text.text = (
-        f"Score: {run_state.score}\n"
-        f"Orbs: {run_state.collected_orbs}\n"
-        f"Depth: {depth:.0f} m\n"
-        f"Zone: {depth_zone_label(depth)}\n"
-        f"Resets: {run_state.reset_count}"
-    )
 
 
 def update_camera_tracking(
