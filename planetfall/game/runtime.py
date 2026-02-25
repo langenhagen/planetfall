@@ -8,7 +8,7 @@ from math import cos, sin, tau
 from pathlib import Path
 from random import Random
 from time import monotonic
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Callable, cast
 
 import ursina
 import ursina.color as color_module
@@ -192,6 +192,7 @@ class PlayerVisualState:
     aura: Entity
 
 
+@lru_cache(maxsize=32)
 def resolve_color(color_name: str) -> Color:
     """Resolve a color name from Ursina's built-in color palette."""
     return cast("Color", getattr(color_module, color_name, color_module.white))
@@ -723,15 +724,29 @@ def spawn_entity_from_blueprint(
 
 def trigger_impact_rumble(intensity: float) -> None:
     """Trigger brief gamepad rumble on obstacle impact, if available."""
+    vibrate = resolve_gamepad_vibrate_callable()
+    if vibrate is None:
+        return
+
+    with suppress(Exception):
+        vibrate(
+            low_freq_motor=max(0.2, min(1.0, intensity)),
+            high_freq_motor=max(0.2, min(1.0, intensity + 0.1)),
+            duration=0.09,
+        )
+
+
+@lru_cache(maxsize=1)
+def resolve_gamepad_vibrate_callable() -> Callable[..., object] | None:
+    """Resolve and cache the optional Ursina gamepad vibrate callable."""
     with suppress(Exception):
         gamepad_module = importlib.import_module("ursina.gamepad")
-        vibrate = getattr(gamepad_module, "vibrate", None)
+        if not hasattr(gamepad_module, "vibrate"):
+            return None
+        vibrate = gamepad_module.vibrate
         if callable(vibrate):
-            vibrate(
-                low_freq_motor=max(0.2, min(1.0, intensity)),
-                high_freq_motor=max(0.2, min(1.0, intensity + 0.1)),
-                duration=0.09,
-            )
+            return cast("Callable[..., object]", vibrate)
+    return None
 
 
 def play_sfx_clip(*, clip_name: str, volume: float, pitch: float) -> None:

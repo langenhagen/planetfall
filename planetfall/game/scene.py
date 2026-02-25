@@ -1,6 +1,7 @@
 """Procedural blueprint helpers for the endless falling course."""
 
 from dataclasses import dataclass
+from functools import lru_cache
 from math import atan2, cos, sin, sqrt, tau
 from typing import TYPE_CHECKING
 
@@ -112,12 +113,14 @@ def build_fall_band_blueprints(
     return tuple(blueprints)
 
 
+@lru_cache(maxsize=1024)
 def _path_center(band_index: int) -> Vec3:
     angle = band_index * 0.37
     radius = (3.6 + (sin(band_index * 0.19) * 1.2)) * TUNNEL_WIDTH_SCALE
     return Vec3(cos(angle) * radius, 0.0, sin(angle * 0.87) * radius)
 
 
+@lru_cache(maxsize=1024)
 def _path_direction(band_index: int) -> Vec3:
     previous_point = _path_center(band_index - 1)
     next_point = _path_center(band_index + 1)
