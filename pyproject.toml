@@ -110,6 +110,14 @@ strict = true
 packages = ["planetfall"]
 explicit_package_bases = false
 
+[tool.pylint.main]
+enable = ["similarities"]
+
+[tool.pylint.similarities]
+min-similarity-lines = 8
+ignore-comments = true
+ignore-docstrings = true
+
 [[tool.mypy.overrides]]
 module = ["ursina", "ursina.*"]
 ignore_missing_imports = true
