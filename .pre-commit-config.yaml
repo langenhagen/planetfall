@@ -32,19 +32,19 @@ repos:
     hooks:
       - id: ty-typecheck
         name: type check with ty
-        entry: uv run --group lint ty check barproj tests
+        entry: uv run --group lint ty check planetfall tests
         language: system
         pass_filenames: false
 
       - id: mypy-typecheck
         name: type check with mypy
-        entry: uv run mypy barproj
+        entry: uv run mypy planetfall
         language: system
         pass_filenames: false
 
       - id: vulture
         name: check dead code with vulture
-        entry: uv run --group lint vulture barproj tests
+        entry: uv run --group lint vulture planetfall tests
         args: [--min-confidence, "70"]
         language: system
         pass_filenames: false

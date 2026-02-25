@@ -6,12 +6,12 @@ import argparse
 from typing import TYPE_CHECKING
 from unittest import TestCase
 
-from barproj import cli
+from planetfall import cli
 
 if TYPE_CHECKING:
     import pytest
 
-    from barproj.game.config import GameSettings
+    from planetfall.game.config import GameSettings
 
 
 CHECKER = TestCase()
@@ -27,8 +27,8 @@ def test_main_calls_run_game(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_run_game(*, settings: GameSettings) -> None:
         calls.append(settings)
 
-    monkeypatch.setattr("barproj.cli.parse_args", fake_parse_args)
-    monkeypatch.setattr("barproj.cli.run_game", fake_run_game)
+    monkeypatch.setattr("planetfall.cli.parse_args", fake_parse_args)
+    monkeypatch.setattr("planetfall.cli.run_game", fake_run_game)
     cli.main()
 
     CHECKER.assertEqual(len(calls), 1)
@@ -44,8 +44,8 @@ def test_main_passes_fullscreen_setting(monkeypatch: pytest.MonkeyPatch) -> None
     def fake_run_game(*, settings: GameSettings) -> None:
         captured_fullscreen_values.append(settings.fullscreen)
 
-    monkeypatch.setattr("barproj.cli.parse_args", fake_parse_args)
-    monkeypatch.setattr("barproj.cli.run_game", fake_run_game)
+    monkeypatch.setattr("planetfall.cli.parse_args", fake_parse_args)
+    monkeypatch.setattr("planetfall.cli.run_game", fake_run_game)
     cli.main()
 
     CHECKER.assertEqual(captured_fullscreen_values, [True])

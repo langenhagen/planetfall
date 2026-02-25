@@ -1,4 +1,4 @@
-"""barproj package."""
+"""planetfall package."""
 
 __all__ = ["main", "run_game"]
 

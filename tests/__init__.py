@@ -1,1 +1,1 @@
-"""Test package for barproj."""
+"""Test package for planetfall."""

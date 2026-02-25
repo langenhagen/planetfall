@@ -1,5 +1,5 @@
 [project]
-name = "barproj"
+name = "planetfall"
 version = "0.1.0"
 description = "Python boilerplate powered by uv and pyenv"
 readme = "README.md"
@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-barproj = "barproj.cli:main"
+planetfall = "planetfall.cli:main"
 
 [dependency-groups]
 dev = [
@@ -34,7 +34,7 @@ requires = ["hatchling>=1.27.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["barproj"]
+packages = ["planetfall"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -99,7 +99,7 @@ profile = "black"
 [tool.mypy]
 python_version = "3.14"
 strict = true
-packages = ["barproj"]
+packages = ["planetfall"]
 explicit_package_bases = false
 
 [[tool.mypy.overrides]]

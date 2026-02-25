@@ -22,14 +22,14 @@ Usage:
 Options:
   --run-game                  Launch game and capture its stdout/stderr log
   --game-cmd <command>        Command used with --run-game
-                              (default: .venv/bin/python -u barproj/cli.py)
+                              (default: .venv/bin/python -u planetfall/cli.py)
   -h, --help                  Show this help
 
 Examples:
   scripts/capture-game.sh
   scripts/capture-game.sh --interval 0.5 --frames 120
   scripts/capture-game.sh --run-game --frames 60
-  scripts/capture-game.sh --run-game --game-cmd "uv run barproj --fullscreen"
+  scripts/capture-game.sh --run-game --game-cmd "uv run planetfall --fullscreen"
   scripts/capture-game.sh --startup-wait 30 --frames 240
 
 Notes:
@@ -44,7 +44,7 @@ EOF
 }
 
 RUN_GAME="0"
-GAME_CMD=".venv/bin/python -u barproj/cli.py"
+GAME_CMD=".venv/bin/python -u planetfall/cli.py"
 CAPTURE_ARGS=()
 
 while [[ $# -gt 0 ]]; do

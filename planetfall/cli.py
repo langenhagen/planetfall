@@ -1,14 +1,16 @@
-"""Command-line entrypoint for barproj."""
+"""Command-line entrypoint for planetfall."""
 
 import argparse
 
-from barproj.game import run_game
-from barproj.game.config import GameSettings
+from planetfall.game import run_game
+from planetfall.game.config import GameSettings
 
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI flags for runtime launch options."""
-    parser = argparse.ArgumentParser(description="Run the barproj endless falling game")
+    parser = argparse.ArgumentParser(
+        description="Run the planetfall endless falling game",
+    )
     parser.add_argument(
         "--fullscreen",
         action="store_true",
