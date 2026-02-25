@@ -1,6 +1,7 @@
-# Fooproj
+# Planetfall
 
-Third-person endless falling game built with Ursina and Python.
+A largely vibe coded third-person endless falling game built with Ursina and Python,
+similar to the memorable parts from LEGO City Undercover
 
 The player dives from deep space toward a distant planet, steers around
 obstacles, and collects chained glowing orbs while descending.
@@ -16,7 +17,9 @@ obstacles, and collects chained glowing orbs while descending.
 pyenv install -s 3.14.3
 pyenv local 3.14.3
 uv sync
-uv run planetfall
+uv run planetfall  # launch the game
+uv run planetfall --fullscreen  # launch the game in fullscreen mode
+uv run planetfall --help        # show command help
 ```
 
 ## Controls
@@ -45,6 +48,13 @@ Ursina exposes standard gamepad names, so PS5 controls map as:
 - D-pad up/down: zoom in/out
 - D-pad left: recenter camera
 - Start: pause/resume
+
+## Project Layout
+
+- `planetfall/`: application package and CLI entrypoint
+- `planetfall/game/`: runtime, control logic, procedural falling-scene generation
+- `tests/`: test suite
+- `pyproject.toml`: project metadata and tool/lint configuration
 
 ## Full Setup and Checks
 
@@ -99,10 +109,3 @@ scripts/capture-window.sh --name "ursina" --out __debug/screens --frames 60
 
 You can combine capture scripts with `xdotool` input automation for repeatable
 fall scenarios and visual debugging.
-
-## Project Layout
-
-- `planetfall/`: application package and CLI entrypoint
-- `planetfall/game/`: runtime, control logic, procedural falling-scene generation
-- `tests/`: test suite
-- `pyproject.toml`: project metadata and tool/lint configuration
