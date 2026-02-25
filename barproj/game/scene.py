@@ -9,11 +9,18 @@ if TYPE_CHECKING:
 else:  # pragma: no cover - runtime fallback for deferred annotations.
     Random = object
 
-LANE_POSITIONS = (-6.0, -3.0, 0.0, 3.0, 6.0)
+TUNNEL_WIDTH_SCALE = 1.5
+LANE_POSITIONS = (
+    -6.0 * TUNNEL_WIDTH_SCALE,
+    -3.0 * TUNNEL_WIDTH_SCALE,
+    0.0,
+    3.0 * TUNNEL_WIDTH_SCALE,
+    6.0 * TUNNEL_WIDTH_SCALE,
+)
 BAND_SPACING = 18.0
 COIN_SCORE_VALUE = 10
-MAX_COLLIDABLE_ABS = 6.0
-DECOR_RING_RADIUS = 10.5
+MAX_COLLIDABLE_ABS = 6.0 * TUNNEL_WIDTH_SCALE
+DECOR_RING_RADIUS = 10.5 * TUNNEL_WIDTH_SCALE
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,7 +107,7 @@ def build_fall_band_blueprints(
 
 def _path_center(band_index: int) -> Vec3:
     angle = band_index * 0.37
-    radius = 3.6 + (sin(band_index * 0.19) * 1.2)
+    radius = (3.6 + (sin(band_index * 0.19) * 1.2)) * TUNNEL_WIDTH_SCALE
     return Vec3(cos(angle) * radius, 0.0, sin(angle * 0.87) * radius)
 
 
@@ -222,9 +229,9 @@ def _coin_chain_blueprints(
     blueprints = [
         _coin_blueprint(
             name="coin_chain_lead",
-            x_pos=center.x - (direction.x * 1.2),
+            x_pos=center.x - (direction.x * 1.2 * TUNNEL_WIDTH_SCALE),
             y_pos=y_position + 0.4,
-            z_pos=center.z - (direction.z * 1.2),
+            z_pos=center.z - (direction.z * 1.2 * TUNNEL_WIDTH_SCALE),
         ),
         _coin_blueprint(
             name="coin_chain_center",
@@ -234,9 +241,9 @@ def _coin_chain_blueprints(
         ),
         _coin_blueprint(
             name="coin_chain_tail",
-            x_pos=center.x + (direction.x * 1.2),
+            x_pos=center.x + (direction.x * 1.2 * TUNNEL_WIDTH_SCALE),
             y_pos=y_position + 0.4,
-            z_pos=center.z + (direction.z * 1.2),
+            z_pos=center.z + (direction.z * 1.2 * TUNNEL_WIDTH_SCALE),
         ),
     ]
 
@@ -244,9 +251,9 @@ def _coin_chain_blueprints(
         blueprints.append(
             _coin_blueprint(
                 name="coin_chain_side",
-                x_pos=center.x + (side.x * 1.05),
+                x_pos=center.x + (side.x * 1.05 * TUNNEL_WIDTH_SCALE),
                 y_pos=y_position + 0.65,
-                z_pos=center.z + (side.z * 1.05),
+                z_pos=center.z + (side.z * 1.05 * TUNNEL_WIDTH_SCALE),
             ),
         )
 
@@ -313,10 +320,10 @@ def _chicane_pattern_blueprints(
     band_index: int,
 ) -> tuple[FallingBlueprint, ...]:
     path_center = _path_center(band_index)
-    row_a_z = _lane_snap(path_center.z + 2.4)
-    row_b_z = _lane_snap(path_center.z - 2.4)
-    open_a = _lane_snap(path_center.x - 3.0)
-    open_b = _lane_snap(path_center.x + 3.0)
+    row_a_z = _lane_snap(path_center.z + (2.4 * TUNNEL_WIDTH_SCALE))
+    row_b_z = _lane_snap(path_center.z - (2.4 * TUNNEL_WIDTH_SCALE))
+    open_a = _lane_snap(path_center.x - (3.0 * TUNNEL_WIDTH_SCALE))
+    open_b = _lane_snap(path_center.x + (3.0 * TUNNEL_WIDTH_SCALE))
     blueprints: list[FallingBlueprint] = []
 
     for lane_x in LANE_POSITIONS:
@@ -362,9 +369,9 @@ def _ring_gap_pattern_blueprints(
         blueprints.append(
             _obstacle_blueprint(
                 name=f"ring_block_{index}",
-                x_pos=cos(angle) * 5.8,
+                x_pos=cos(angle) * (5.8 * TUNNEL_WIDTH_SCALE),
                 y_pos=y_position,
-                z_pos=sin(angle) * 5.8,
+                z_pos=sin(angle) * (5.8 * TUNNEL_WIDTH_SCALE),
                 scale=Vec3(1.6, 1.6, 1.6),
                 color_name="magenta",
             ),
@@ -386,9 +393,9 @@ def _comet_pattern_blueprints(
         blueprints.append(
             _obstacle_blueprint(
                 name=f"comet_block_{index}",
-                x_pos=cos(angle) * 5.5,
+                x_pos=cos(angle) * (5.5 * TUNNEL_WIDTH_SCALE),
                 y_pos=y_position,
-                z_pos=sin(angle) * 5.5,
+                z_pos=sin(angle) * (5.5 * TUNNEL_WIDTH_SCALE),
                 scale=Vec3(1.8, 1.8, 1.8),
                 color_name="brown",
             ),
@@ -408,11 +415,12 @@ def _bonus_coin_arc_blueprints(
     blueprints: list[FallingBlueprint] = []
 
     for index in range(3):
-        lift = (index - 1) * 0.95
+        lift = (index - 1) * (0.95 * TUNNEL_WIDTH_SCALE)
         blueprints.append(
             _coin_blueprint(
                 name=f"bonus_arc_coin_{index}",
-                x_pos=center.x + (side_sign * (2.0 + (index * 0.6))),
+                x_pos=center.x
+                + (side_sign * ((2.0 + (index * 0.6)) * TUNNEL_WIDTH_SCALE)),
                 y_pos=y_position + 0.9,
                 z_pos=center.z + lift,
             ),
