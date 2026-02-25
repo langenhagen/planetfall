@@ -1299,7 +1299,6 @@ def apply_player_movement(
     x_axis: float,
     z_axis: float,
     dive_axis: float,
-    yaw_turn_axis: float,
     dt: float,
 ) -> float:
     """Move the player avatar and return effective vertical fall speed."""
@@ -1362,7 +1361,6 @@ def apply_player_movement(
         "float",
         lerp_exponential_decay(player.rotation_x, target_pitch, dt * 9.0),
     )
-    player.rotation_y += yaw_turn_axis * movement_settings.yaw_turn_speed * dt
     return fall_speed
 
 
@@ -1440,14 +1438,41 @@ def install_game_controller(
                 camera_settings=settings.camera,
                 look_velocity=look_velocity,
             )
+            player.rotation_y = camera_state.yaw_angle
             return
 
         if run_state.is_paused:
+            camera_state.yaw_angle, camera_state.pitch_angle = compute_look_angles(
+                yaw_angle=camera_state.yaw_angle,
+                pitch_angle=camera_state.pitch_angle,
+                look_velocity=look_velocity,
+                mouse_look_speed=settings.camera.mouse_look_speed,
+                min_pitch=settings.camera.min_pitch,
+                max_pitch=settings.camera.max_pitch,
+            )
+            player.rotation_y = camera_state.yaw_angle
+            update_camera_tracking(
+                player=player,
+                orbit_rig=orbit_rig,
+                camera_state=camera_state,
+                camera_settings=settings.camera,
+                look_velocity=Vec3(0.0, 0.0, 0.0),
+            )
             update_status_text(run_state, status_text)
             return
 
+        camera_state.yaw_angle, camera_state.pitch_angle = compute_look_angles(
+            yaw_angle=camera_state.yaw_angle,
+            pitch_angle=camera_state.pitch_angle,
+            look_velocity=look_velocity,
+            mouse_look_speed=settings.camera.mouse_look_speed,
+            min_pitch=settings.camera.min_pitch,
+            max_pitch=settings.camera.max_pitch,
+        )
+
         yaw_turn_delta = yaw_turn_axis * settings.movement.yaw_turn_speed * dt
         camera_state.yaw_angle += yaw_turn_delta
+        player.rotation_y = camera_state.yaw_angle
 
         fall_speed = apply_player_movement(
             player=player,
@@ -1458,7 +1483,6 @@ def install_game_controller(
             x_axis=x_axis,
             z_axis=z_axis,
             dive_axis=dive_axis,
-            yaw_turn_axis=yaw_turn_axis,
             dt=dt,
         )
         run_state.deepest_y = min(run_state.deepest_y, player.y)
@@ -1487,7 +1511,7 @@ def install_game_controller(
             orbit_rig=orbit_rig,
             camera_state=camera_state,
             camera_settings=settings.camera,
-            look_velocity=look_velocity,
+            look_velocity=Vec3(0.0, 0.0, 0.0),
         )
         update_atmosphere_for_depth(
             player=player,
