@@ -1352,7 +1352,7 @@ def apply_player_movement(
     if movement_settings.depth_speed > 0.0:
         normalized_depth = motion_state.depth_speed / movement_settings.depth_speed
 
-    target_roll = -normalized_horizontal * movement_settings.tilt_degrees
+    target_roll = normalized_horizontal * movement_settings.tilt_degrees
     target_pitch = normalized_depth * movement_settings.tilt_degrees * 0.7
     player.rotation_z = cast(
         "float",
