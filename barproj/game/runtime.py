@@ -74,9 +74,11 @@ SCROLL_DIRECTION_BY_KEY = {
     "gamepad dpad up": 1,
     "gamepad dpad down": -1,
 }
-RESTART_KEYS = {"r", "gamepad start"}
+RESTART_KEYS = {"r"}
 TOGGLE_CONTROLS_KEYS = {"u", "gamepad y"}
 RECENTER_CAMERA_KEYS = {"c", "gamepad dpad left"}
+PAUSE_KEYS = {"p", "gamepad start"}
+ANIMATION_CULL_DISTANCE = 85.0
 
 
 @dataclass(slots=True)
@@ -110,6 +112,7 @@ class SpawnedObject:
 
     entity: Entity
     entity_kind: str
+    model_name: str
     collision_radius: float
     score_value: int
     spin_speed: float = 0.0
@@ -120,6 +123,9 @@ class SpawnedObject:
     pulse_frequency: float = 0.0
     base_y: float = 0.0
     base_scale: Vec3 = field(default_factory=lambda: Vec3(1.0, 1.0, 1.0))
+    spawn_time: float = 0.0
+    fade_duration: float = 0.0
+    target_rgba: tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)
 
 
 @dataclass(slots=True)
@@ -130,6 +136,7 @@ class FallingRunState:
     collected_orbs: int = 0
     reset_count: int = 0
     deepest_y: float = 0.0
+    is_paused: bool = False
     next_band_index: int = 0
     next_band_y: float = 0.0
     last_hit_time: float = 0.0
@@ -417,6 +424,8 @@ def configure_window(settings: GameSettings) -> None:
     window.title = settings.window_title
     window.borderless = settings.borderless
     window.fullscreen = settings.fullscreen
+    window.entity_counter.enabled = False
+    window.collider_counter.enabled = False
 
 
 def add_avatar_part(
@@ -604,8 +613,9 @@ def create_controls_hint() -> Text:
             "Pad steer: left stick + L1/R1\n"
             "Look: mouse / right stick\n"
             "Zoom: mouse wheel / dpad up-down\n"
+            "Pause: p / start\n"
             "Recenter: c / dpad left\n"
-            "Restart: r / start\n"
+            "Restart: r\n"
             "UI: u"
         ),
         x=-0.86,
@@ -623,6 +633,18 @@ def create_status_text() -> Text:
         x=0.56,
         y=0.45,
         scale=1.05,
+    )
+
+
+def create_pause_text() -> Text:
+    """Create pause overlay text shown when gameplay is paused."""
+    return Text(
+        name="pause_text",
+        text="Paused\nPress P or Start",
+        origin=(0.0, 0.0),
+        scale=2.1,
+        background=True,
+        enabled=False,
     )
 
 
@@ -686,7 +708,7 @@ def create_space_backdrop() -> BackdropState:
         stars.append(
             Entity(
                 name=f"space_star_{star_index}",
-                model="sphere",
+                model="icosphere",
                 scale=Vec3(star_size, star_size, star_size),
                 position=Vec3(cos(angle) * radius, star_y, sin(angle) * radius),
                 color=color_module.rgba(1.0, 1.0, 1.0, 1.0),
@@ -700,7 +722,7 @@ def create_space_backdrop() -> BackdropState:
         nebulae.append(
             Entity(
                 name=f"space_nebula_{nebula_index}",
-                model="sphere",
+                model="icosphere",
                 position=Vec3(
                     cos(angle) * radius,
                     18.0 + (nebula_index * 5.0),
@@ -866,19 +888,23 @@ def spawn_entity_from_blueprint(
     bob_frequency = 0.0
     pulse_amplitude = 0.0
     pulse_frequency = 0.0
+    fade_duration = 0.16
+
+    target_color = resolve_color(blueprint.color_name)
 
     if blueprint.entity_kind == "coin":
         entity.unlit = True
-        entity.color = rgba_color(1.0, 0.95, 0.25, 1.0)
-        Entity(
-            parent=entity,
-            name=f"{entity_name}_coin_halo",
-            model="sphere",
-            scale=Vec3(1.75, 1.75, 1.75),
-            color=rgba_color(1.0, 0.92, 0.3, 0.2),
-            unlit=True,
-        )
-        spin_speed = 210.0 + ((variation_seed % 6) * 24.0)
+        target_color = rgba_color(1.0, 0.95, 0.25, 1.0)
+        if variation_seed % 2 == 0:
+            Entity(
+                parent=entity,
+                name=f"{entity_name}_coin_halo",
+                model="sphere",
+                scale=Vec3(1.68, 1.68, 1.68),
+                color=rgba_color(1.0, 0.93, 0.3, 0.16),
+                unlit=True,
+            )
+        spin_speed = 0.0
         bob_amplitude = 0.08 + ((variation_seed % 4) * 0.03)
         bob_frequency = 2.5 + ((variation_seed % 5) * 0.36)
         pulse_amplitude = 0.08 + ((variation_seed % 3) * 0.03)
@@ -886,13 +912,13 @@ def spawn_entity_from_blueprint(
     else:
         mark_lit_shadowed(entity)
         if blueprint.entity_kind == "obstacle":
-            if variation_seed % 2 == 0:
+            if variation_seed % 3 == 0:
                 Entity(
                     parent=entity,
-                    name=f"{entity_name}_obstacle_glow",
+                    name=f"{entity_name}_obstacle_halo",
                     model=blueprint.model,
-                    scale=Vec3(1.2, 1.2, 1.2),
-                    color=rgba_color(1.0, 0.4, 0.2, 0.16),
+                    scale=Vec3(1.22, 1.22, 1.22),
+                    color=rgba_color(1.0, 0.45, 0.28, 0.12),
                     unlit=True,
                 )
             spin_speed = 16.0 + ((variation_seed % 7) * 6.0)
@@ -900,9 +926,18 @@ def spawn_entity_from_blueprint(
         else:
             rock_speed = 6.0 + ((variation_seed % 5) * 2.5)
 
+    target_rgba = (
+        cast("float", target_color.r),
+        cast("float", target_color.g),
+        cast("float", target_color.b),
+        cast("float", target_color.a),
+    )
+    entity.color = rgba_color(target_rgba[0], target_rgba[1], target_rgba[2], 0.0)
+
     return SpawnedObject(
         entity=entity,
         entity_kind=blueprint.entity_kind,
+        model_name=blueprint.model,
         collision_radius=blueprint.collision_radius,
         score_value=blueprint.score_value,
         spin_speed=spin_speed,
@@ -913,6 +948,9 @@ def spawn_entity_from_blueprint(
         pulse_frequency=pulse_frequency,
         base_y=entity.y,
         base_scale=base_scale,
+        spawn_time=monotonic(),
+        fade_duration=fade_duration,
+        target_rgba=target_rgba,
     )
 
 
@@ -987,16 +1025,24 @@ def initialize_run_state(
     run_state.score = 0
     run_state.collected_orbs = 0
     run_state.reset_count = 0
+    run_state.is_paused = False
     run_state.deepest_y = 0.0
     run_state.next_band_index = 0
     run_state.next_band_y = fall_settings.initial_spawn_y
     run_state.last_hit_time = 0.0
 
 
+def destroy_entity_tree(entity: Entity) -> None:
+    """Destroy an entity and any child entities to avoid scene leaks."""
+    for child in list(entity.children):
+        destroy_entity_tree(cast("Entity", child))
+    destroy(entity)
+
+
 def destroy_spawned_objects(spawned_objects: list[SpawnedObject]) -> None:
     """Destroy spawned entities and clear the container in-place."""
     for spawned in spawned_objects:
-        destroy(spawned.entity)
+        destroy_entity_tree(spawned.entity)
     spawned_objects.clear()
 
 
@@ -1045,7 +1091,7 @@ def cleanup_passed_objects(
             player_y=player_y,
             cleanup_above_distance=cleanup_above_distance,
         ):
-            destroy(spawned.entity)
+            destroy_entity_tree(spawned.entity)
             continue
         survivors.append(spawned)
 
@@ -1086,7 +1132,7 @@ def process_collisions(
             survivors.append(spawned)
             continue
 
-        destroy(spawned.entity)
+        destroy_entity_tree(spawned.entity)
         if spawned.entity_kind == "coin":
             run_state.collected_orbs += 1
             run_state.score += spawned.score_value
@@ -1121,11 +1167,28 @@ def animate_spawned_objects(
     """Animate collectibles and obstacles for richer motion language."""
     runtime_time = monotonic()
     for spawned in run_state.spawned_objects:
-        if abs(spawned.entity.y - player_y) > 85.0:
+        if spawned.fade_duration > 0.0:
+            fade_progress = max(
+                0.0,
+                min(1.0, (runtime_time - spawned.spawn_time) / spawned.fade_duration),
+            )
+            alpha_blend = 0.35 + (fade_progress * 0.65)
+            target_red, target_green, target_blue, target_alpha = spawned.target_rgba
+            spawned.entity.color = rgba_color(
+                target_red,
+                target_green,
+                target_blue,
+                target_alpha * alpha_blend,
+            )
+
+        if abs(spawned.entity.y - player_y) > ANIMATION_CULL_DISTANCE:
             continue
 
+        is_sphere_model = spawned.model_name in {"sphere", "icosphere"}
+
         if spawned.entity_kind == "coin":
-            spawned.entity.rotation_y += spawned.spin_speed * dt
+            if not is_sphere_model:
+                spawned.entity.rotation_y += spawned.spin_speed * dt
             if spawned.bob_amplitude > 0.0:
                 spawned.entity.y = spawned.base_y + (
                     sin(
@@ -1147,8 +1210,9 @@ def animate_spawned_objects(
                 )
             continue
 
-        spawned.entity.rotation_y += spawned.spin_speed * dt
-        spawned.entity.rotation_x += spawned.rock_speed * dt
+        if not is_sphere_model:
+            spawned.entity.rotation_y += spawned.spin_speed * dt
+            spawned.entity.rotation_x += spawned.rock_speed * dt
 
 
 def depth_zone_label(depth: float) -> str:
@@ -1168,7 +1232,8 @@ def update_status_text(run_state: FallingRunState, status_text: Text) -> None:
         f"Orbs: {run_state.collected_orbs}\n"
         f"Depth: {depth:.0f} m\n"
         f"Zone: {depth_zone_label(depth)}\n"
-        f"Resets: {run_state.reset_count}"
+        f"Resets: {run_state.reset_count}\n"
+        f"Paused: {'yes' if run_state.is_paused else 'no'}"
     )
 
 
@@ -1292,6 +1357,7 @@ def install_game_controller(
     player_visual_state: PlayerVisualState,
     controls_hint: Text,
     status_text: Text,
+    pause_text: Text,
 ) -> Entity:
     """Attach per-frame gameplay update and input handlers."""
     controller = Entity(name="fall_game_controller")
@@ -1316,6 +1382,7 @@ def install_game_controller(
         camera_state.yaw_angle = 0.0
         camera_state.pitch_angle = settings.camera.start_pitch
         camera_state.distance = settings.camera.distance
+        pause_text.enabled = False
         spawn_bands_ahead(
             run_state=run_state,
             player_y=player.y,
@@ -1354,6 +1421,10 @@ def install_game_controller(
                 camera_settings=settings.camera,
                 look_velocity=look_velocity,
             )
+            return
+
+        if run_state.is_paused:
+            update_status_text(run_state, status_text)
             return
 
         fall_speed = apply_player_movement(
@@ -1416,6 +1487,11 @@ def install_game_controller(
         if key in TOGGLE_CONTROLS_KEYS:
             controls_hint.enabled = not controls_hint.enabled
 
+        if key in PAUSE_KEYS:
+            run_state.is_paused = not run_state.is_paused
+            pause_text.enabled = run_state.is_paused
+            return
+
         if key in RESTART_KEYS:
             reset_run()
             return
@@ -1456,6 +1532,7 @@ def run_game(settings: GameSettings | None = None) -> None:
     configure_mouse_capture()
     controls_hint = create_controls_hint()
     status_text = create_status_text()
+    pause_text = create_pause_text()
     lighting_rig = configure_lighting(player)
     backdrop_state = create_space_backdrop()
     install_game_controller(
@@ -1467,6 +1544,7 @@ def run_game(settings: GameSettings | None = None) -> None:
         player_visual_state=player_visual_state,
         controls_hint=controls_hint,
         status_text=status_text,
+        pause_text=pause_text,
     )
 
     # Ursina's app proxy is typed as object here, so dynamic access is needed.

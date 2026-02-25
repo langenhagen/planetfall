@@ -26,7 +26,7 @@ class FallSettings:
     brake_multiplier: float = 0.55
     recovery_height: float = 12.0
     recovery_score_penalty: int = 35
-    spawn_ahead_distance: float = 220.0
+    spawn_ahead_distance: float = 300.0
     cleanup_above_distance: float = 52.0
     initial_spawn_y: float = -36.0
 

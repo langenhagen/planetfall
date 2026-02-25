@@ -27,6 +27,7 @@ uv run barproj
 - Obstacle hit: rumble + reset a bit higher (no death)
 - Mouse move: orbit look (captured cursor)
 - Mouse wheel: zoom in/out
+- `p`: pause/resume
 - `c`: recenter camera
 - `r`: restart run
 - `u`: toggle controls hint
@@ -41,7 +42,7 @@ Ursina exposes standard gamepad names, so PS5 controls map as:
 - Right stick: camera look
 - D-pad up/down: zoom in/out
 - D-pad left: recenter camera
-- Start: restart run
+- Start: pause/resume
 
 ## Full Setup and Checks
 
