@@ -1256,8 +1256,7 @@ def update_status_text(run_state: FallingRunState, status_text: Text) -> None:
         f"Orbs: {run_state.collected_orbs}\n"
         f"Depth: {depth:.0f} m\n"
         f"Zone: {depth_zone_label(depth)}\n"
-        f"Resets: {run_state.reset_count}\n"
-        f"Paused: {'yes' if run_state.is_paused else 'no'}"
+        f"Resets: {run_state.reset_count}"
     )
 
 
