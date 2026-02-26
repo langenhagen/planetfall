@@ -4,11 +4,9 @@ from random import Random
 from unittest import TestCase
 
 from planetfall.game.scene import (
-    BAND_SPACING,
     COIN_SCORE_VALUE,
     HIGH_VALUE_COIN_SCORE_VALUE,
     LANE_POSITIONS,
-    band_y_position,
     build_fall_band_blueprints,
 )
 
@@ -18,14 +16,6 @@ CHECKER = TestCase()
 def deterministic_rng(seed: int) -> Random:
     """Create deterministic non-crypto RNG for gameplay layout tests."""
     return Random(seed)  # noqa: S311  # nosec B311
-
-
-def test_band_y_position_steps_downward_by_spacing() -> None:
-    """Translate sequential band index values into descending y positions."""
-    first = band_y_position(start_y=-36.0, band_index=0)
-    fourth = band_y_position(start_y=-36.0, band_index=3)
-    CHECKER.assertEqual(first, -36.0)
-    CHECKER.assertEqual(fourth, -36.0 - (3 * BAND_SPACING))
 
 
 def test_build_fall_band_blueprints_contains_decor_and_collidables() -> None:

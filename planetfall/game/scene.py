@@ -54,16 +54,6 @@ class FallingBlueprint:
     score_value: int = 0
 
 
-def band_y_position(
-    *,
-    start_y: float,
-    band_index: int,
-    spacing: float = BAND_SPACING,
-) -> float:
-    """Convert a sequential band index into a world-space y position."""
-    return start_y - (band_index * spacing)
-
-
 def build_fall_band_blueprints(
     *,
     band_index: int,

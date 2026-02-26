@@ -15,8 +15,6 @@ class RunStateLike(Protocol):
     collected_orbs: int
     deepest_y: float
     reset_count: int
-    post_effect_name: str
-    render_mode_name: str
 
 
 def create_controls_hint() -> Text:

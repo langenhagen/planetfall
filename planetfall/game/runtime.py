@@ -173,8 +173,6 @@ class FallingRunState:
     next_band_index: int = 0
     next_band_y: float = 0.0
     last_hit_time: float = 0.0
-    post_effect_name: str = "Off"
-    render_mode_name: str = "default"
     spawned_objects: list[SpawnedObject] = field(default_factory=list)
 
 
@@ -411,17 +409,6 @@ def update_player_visual_state(
             1.0,
             lerp_scalar(0.2, 0.52, speed_factor),
         )
-
-
-@lru_cache(maxsize=8)
-def resolve_optional_shader(module_path: str, shader_name: str) -> object | None:
-    """Resolve one shader object dynamically when available in this Ursina build."""
-    with suppress(Exception):
-        module = importlib.import_module(module_path)
-        shader = getattr(module, shader_name, None)
-        if shader is not None:
-            return cast("object", shader)
-    return None
 
 
 def configure_camera() -> None:
@@ -863,8 +850,6 @@ def initialize_run_state(
     run_state.next_band_index = 0
     run_state.next_band_y = fall_settings.initial_spawn_y
     run_state.last_hit_time = 0.0
-    run_state.post_effect_name = CAMERA_POST_PROCESS_OPTIONS[0][0]
-    run_state.render_mode_name = cast("str", getattr(window, "render_mode", "default"))
 
 
 def destroy_entity_tree(entity: Entity) -> None:
@@ -1209,10 +1194,6 @@ def install_game_controller(
         camera_state.yaw_angle = 0.0
         camera_state.pitch_angle = settings.camera.start_pitch
         camera_state.distance = settings.camera.distance
-        run_state.post_effect_name = CAMERA_POST_PROCESS_OPTIONS[post_process_index][0]
-        run_state.render_mode_name = cast(
-            "str", getattr(window, "render_mode", "default")
-        )
         apply_camera_post_process(CAMERA_POST_PROCESS_OPTIONS[post_process_index][1])
         pause_text.enabled = False
         spawn_bands_ahead(
@@ -1355,9 +1336,8 @@ def install_game_controller(
             post_process_index = (post_process_index + 1) % len(
                 CAMERA_POST_PROCESS_OPTIONS
             )
-            post_name, post_shader = CAMERA_POST_PROCESS_OPTIONS[post_process_index]
+            _, post_shader = CAMERA_POST_PROCESS_OPTIONS[post_process_index]
             apply_camera_post_process(post_shader)
-            run_state.post_effect_name = post_name
             update_status_text(run_state, status_text)
             return
 
@@ -1365,7 +1345,6 @@ def install_game_controller(
             current_mode = cast("str", getattr(window, "render_mode", "default"))
             next_mode = "wireframe" if current_mode != "wireframe" else "default"
             window.render_mode = next_mode
-            run_state.render_mode_name = next_mode
             update_status_text(run_state, status_text)
             return
 
