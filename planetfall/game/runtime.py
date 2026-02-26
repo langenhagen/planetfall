@@ -93,7 +93,7 @@ SPACE_SKY_TEXTURE_CANDIDATES = (
     "NightSkyHDRI009.png",
     "NightSkyHDRI009_4K_HDR.exr",
 )
-COIN_SFX_NAMES = ("glass_001.ogg",)
+COIN_SFX_NAMES = ("driken5482-retro-coin-4-236671.mp3",)
 IMPACT_SFX_NAMES = ("explosionCrunch_000.ogg",)
 SCROLL_DIRECTION_BY_KEY = {
     "scroll up": 1,
