@@ -93,18 +93,8 @@ SPACE_SKY_TEXTURE_CANDIDATES = (
     "NightSkyHDRI009.png",
     "NightSkyHDRI009_4K_HDR.exr",
 )
-COIN_SFX_NAMES = (
-    "coin.ogg",
-    "coins.ogg",
-    "coin_pickup.ogg",
-    "pickup.ogg",
-)
-IMPACT_SFX_NAMES = (
-    "impact.ogg",
-    "hit.ogg",
-    "obstacle.ogg",
-    "collision.ogg",
-)
+COIN_SFX_NAMES = ("glass_001.ogg",)
+IMPACT_SFX_NAMES = ("explosionCrunch_000.ogg",)
 SCROLL_DIRECTION_BY_KEY = {
     "scroll up": 1,
     "scroll down": -1,
