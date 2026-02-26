@@ -17,6 +17,7 @@ from ursina import (
     Audio,
     DirectionalLight,
     Entity,
+    Shader,
     Text,
     Vec2,
     Vec3,
@@ -24,6 +25,7 @@ from ursina import (
     camera,
     destroy,
     lerp_exponential_decay,
+    load_texture,
     mouse,
     scene,
     window,
@@ -93,6 +95,8 @@ SPACE_SKY_TEXTURE_CANDIDATES = (
     "NightSkyHDRI009.png",
     "NightSkyHDRI009_4K_HDR.exr",
 )
+SKY_BLEND_HOLD_SECONDS = 24.0
+SKY_BLEND_DURATION_SECONDS = 6.0
 ASTEROID_MODEL_NAME = "models/asteroids/Asteroid_1.obj"
 ASTEROID_MODEL_VARIANTS: tuple[str, ...] = (
     "models/asteroids/Asteroid_1.obj",
@@ -103,12 +107,12 @@ ASTEROID_MODEL_VARIANTS: tuple[str, ...] = (
     "models/asteroids/Rocky_Asteroid_6.obj",
 )
 ASTEROID_DIFFUSE_TEXTURE_BY_MODEL: dict[str, str] = {
-    "models/asteroids/Asteroid_1.obj": "models/asteroids/Textures_Asteroid_1/Asteroid_1_Diffuse_2K.png",
-    "models/asteroids/Rocky_Asteroid_2.obj": "models/asteroids/Textures_Rocky_Asteroid_2/Rocky_Asteroid_2_Diffuse_2K.png",
-    "models/asteroids/Rocky_Asteroid_3.obj": "models/asteroids/Textures_Rocky_Asteroid_3/Rocky_Asteroid_3_Diffuse_2K.png",
-    "models/asteroids/Rocky_Asteroid_4.obj": "models/asteroids/Textures_Rocky_Asteroid_4/Rocky_Asteroid_4_Diffuse_2K.png",
-    "models/asteroids/Rocky_Asteroid_5.obj": "models/asteroids/Textures_Rocky_Asteroid_5/Rocky_Asteroid_5_Diffuse_2K.png",
-    "models/asteroids/Rocky_Asteroid_6.obj": "models/asteroids/Textures_Rocky_Asteroid_6/Rocky_Asteroid_6_Diffuse_2K.png",
+    "models/asteroids/Asteroid_1.obj": "models/asteroids/Textures_Asteroid_1/Asteroid_1_Diffuse_1K.png",
+    "models/asteroids/Rocky_Asteroid_2.obj": "models/asteroids/Textures_Rocky_Asteroid_2/Rocky_Asteroid_2_Diffuse_1K.png",
+    "models/asteroids/Rocky_Asteroid_3.obj": "models/asteroids/Textures_Rocky_Asteroid_3/Rocky_Asteroid_3_Diffuse_1K.png",
+    "models/asteroids/Rocky_Asteroid_4.obj": "models/asteroids/Textures_Rocky_Asteroid_4/Rocky_Asteroid_4_Diffuse_1K.png",
+    "models/asteroids/Rocky_Asteroid_5.obj": "models/asteroids/Textures_Rocky_Asteroid_5/Rocky_Asteroid_5_Diffuse_1K.png",
+    "models/asteroids/Rocky_Asteroid_6.obj": "models/asteroids/Textures_Rocky_Asteroid_6/Rocky_Asteroid_6_Diffuse_1K.png",
 }
 ASTEROID_SCALE_MIN = 0.6
 ASTEROID_SCALE_MAX = 2.5
@@ -137,6 +141,30 @@ CAMERA_POST_PROCESS_OPTIONS: tuple[tuple[str, object | None], ...] = (
         "Vertical Blur",
         cast("object", ursina_shaders.camera_vertical_blur_shader),
     ),
+)
+
+SKY_BLEND_SHADER = Shader(
+    name="sky_blend_shader",
+    language=Shader.GLSL,
+    fragment="""
+#version 430
+
+in vec2 uv;
+out vec4 color;
+
+uniform sampler2D p3d_Texture0;
+uniform sampler2D secondary_texture;
+uniform float blend_factor;
+
+void main() {
+    vec4 primary = texture(p3d_Texture0, uv);
+    vec4 secondary = texture(secondary_texture, uv);
+    color = vec4(mix(primary.rgb, secondary.rgb, blend_factor), 1.0);
+}
+""",
+    default_input={
+        "blend_factor": 0.0,
+    },
 )
 
 
@@ -461,11 +489,8 @@ def create_space_backdrop() -> BackdropState:
     """Create HDRI sky plus layered ambience for deep-space descent."""
     sky_module = importlib.import_module("ursina.prefabs.sky")
     sky_factory = cast("type[Entity]", sky_module.Sky)
-    sky_texture_path = resolve_space_sky_texture_path()
     sky_entity = sky_factory()
-    if sky_texture_path is not None:
-        sky_texture_name = str(sky_texture_path.relative_to(application.asset_folder))
-        sky_entity.texture = sky_texture_name
+    initialize_sky_texture_blend_state(sky_entity)
 
     stars: list[Entity] = []
     nebulae: list[Entity] = []
@@ -550,6 +575,97 @@ def resolve_space_sky_texture_path() -> Path | None:
     return None
 
 
+def resolve_space_sky_texture_paths() -> tuple[Path, ...]:
+    """Resolve all available sky textures for timed cross-fade cycling."""
+    resolved: list[Path] = []
+
+    for extension in ("*.png", "*.jpg", "*.jpeg", "*.exr"):
+        resolved.extend(
+            sorted(
+                path for path in (ASSETS_DIR / "sky").glob(extension) if path.is_file()
+            ),
+        )
+
+    fallback_texture = resolve_space_sky_texture_path()
+    if fallback_texture is not None and fallback_texture not in resolved:
+        resolved.append(fallback_texture)
+
+    seen: set[Path] = set()
+    deduped: list[Path] = []
+    for texture_path in resolved:
+        if texture_path in seen:
+            continue
+        seen.add(texture_path)
+        deduped.append(texture_path)
+    return tuple(deduped)
+
+
+def initialize_sky_texture_blend_state(sky_entity: Entity) -> None:
+    """Prepare shader inputs and runtime state for sky texture cross-fading."""
+    texture_paths = resolve_space_sky_texture_paths()
+    if not texture_paths:
+        return
+
+    texture_assets = [path.relative_to(ASSETS_DIR).as_posix() for path in texture_paths]
+    preloaded_textures = tuple(
+        load_texture(texture_asset) for texture_asset in texture_assets
+    )
+    sky_entity._sky_blend_assets = tuple(texture_assets)  # noqa: SLF001
+    sky_entity._sky_blend_textures = preloaded_textures  # noqa: SLF001
+    sky_entity._sky_blend_current = 0  # noqa: SLF001
+    sky_entity._sky_blend_next = 1 if len(texture_assets) > 1 else 0  # noqa: SLF001
+    sky_entity._sky_blend_cycle_start = monotonic()  # noqa: SLF001
+
+    sky_entity.texture = texture_assets[0]
+    if len(texture_assets) > 1:
+        sky_entity.shader = SKY_BLEND_SHADER
+        sky_entity.set_shader_input("secondary_texture", preloaded_textures[1])
+        sky_entity.set_shader_input("blend_factor", 0.0)
+
+
+def update_sky_texture_blend(sky_entity: Entity, runtime_time: float) -> None:
+    """Advance timed sky blending so textures smoothly cycle for inspection."""
+    texture_assets = cast(
+        "tuple[str, ...]",
+        getattr(sky_entity, "_sky_blend_assets", ()),
+    )
+    preloaded_textures = cast(
+        "tuple[object, ...]",
+        getattr(sky_entity, "_sky_blend_textures", ()),
+    )
+    if len(texture_assets) < 2:
+        return
+
+    cycle_start = cast(
+        "float", getattr(sky_entity, "_sky_blend_cycle_start", runtime_time)
+    )
+    current_index = cast("int", getattr(sky_entity, "_sky_blend_current", 0))
+    next_index = cast("int", getattr(sky_entity, "_sky_blend_next", 1))
+    full_cycle = SKY_BLEND_HOLD_SECONDS + SKY_BLEND_DURATION_SECONDS
+    cycle_elapsed = runtime_time - cycle_start
+
+    while cycle_elapsed >= full_cycle:
+        current_index = next_index
+        next_index = (next_index + 1) % len(texture_assets)
+        sky_entity.texture = texture_assets[current_index]
+        sky_entity.set_shader_input("secondary_texture", preloaded_textures[next_index])
+        cycle_start += full_cycle
+        cycle_elapsed = runtime_time - cycle_start
+
+    if cycle_elapsed <= SKY_BLEND_HOLD_SECONDS:
+        blend_factor = 0.0
+    else:
+        blend_factor = min(
+            1.0,
+            (cycle_elapsed - SKY_BLEND_HOLD_SECONDS) / SKY_BLEND_DURATION_SECONDS,
+        )
+
+    sky_entity._sky_blend_cycle_start = cycle_start  # noqa: SLF001
+    sky_entity._sky_blend_current = current_index  # noqa: SLF001
+    sky_entity._sky_blend_next = next_index  # noqa: SLF001
+    sky_entity.set_shader_input("blend_factor", blend_factor)
+
+
 def update_atmosphere_for_depth(
     *,
     player: Entity,
@@ -561,6 +677,7 @@ def update_atmosphere_for_depth(
     depth = max(0.0, -player.y)
     progress = max(0.0, min(1.0, depth / PLANET_APPROACH_DEPTH))
     runtime_time = monotonic()
+    update_sky_texture_blend(backdrop_state.sky, runtime_time)
 
     backdrop_state.sky.color = lerp_rgb_color((7, 10, 24), (145, 186, 214), progress)
     lighting_rig.ambient_light.color = color_module.rgba(
