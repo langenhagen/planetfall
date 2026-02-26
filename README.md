@@ -6,6 +6,8 @@ similar to the memorable parts from LEGO City Undercover.
 The player dives from deep space toward a distant planet, steers around
 obstacles, and collects chained glowing orbs while descending.
 
+![](res/screenshot.webp)
+
 ## Requirements
 
 - `pyenv`
