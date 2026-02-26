@@ -10,25 +10,29 @@ if TYPE_CHECKING:
 else:  # pragma: no cover - runtime fallback for deferred annotations.
     Random = object
 
-TUNNEL_WIDTH_SCALE = 1.5  # Master width multiplier for lanes and formations.
+TUNNEL_WIDTH_SCALE = 3.8  # Master width multiplier for lanes and formations.
 LANE_POSITIONS = (
-    -6.0 * TUNNEL_WIDTH_SCALE,
-    -3.0 * TUNNEL_WIDTH_SCALE,
+    -7.5 * TUNNEL_WIDTH_SCALE,
+    -3.75 * TUNNEL_WIDTH_SCALE,
     0.0,
-    3.0 * TUNNEL_WIDTH_SCALE,
-    6.0 * TUNNEL_WIDTH_SCALE,
+    3.75 * TUNNEL_WIDTH_SCALE,
+    7.5 * TUNNEL_WIDTH_SCALE,
 )
-BAND_SPACING = 18.0  # Vertical distance between generated gameplay bands.
+BAND_SPACING = 20.0  # Vertical distance between generated gameplay bands.
 COIN_SCORE_VALUE = 10  # Standard coin value.
 HIGH_VALUE_COIN_SCORE_VALUE = 25  # Bonus coin value (halo-highlighted).
 MAX_COLLIDABLE_ABS = 6.0 * TUNNEL_WIDTH_SCALE  # Clamp for obstacle/coin placement.
-DECOR_RING_RADIUS = 10.5 * TUNNEL_WIDTH_SCALE  # Radius for non-collidable ambience.
+MAX_COIN_ABS = 5.0 * TUNNEL_WIDTH_SCALE  # Keep coin lanes slightly tighter.
 PATTERN_CHICANE = 2  # Pattern index for alternating dual-row gates.
 PATTERN_RING_GAP = 3  # Pattern index for ring obstacle with one open sector.
 # Small-length guard to avoid divide-by-zero normalization.
 PATH_DIRECTION_EPSILON = 1e-4
 RING_GAP_ANGLE_THRESHOLD = 0.52  # Angular width of the safe opening in ring patterns.
 BONUS_ARC_SIDE_SPLIT = 0.5  # 50/50 chance for bonus arc on left or right side.
+OBSTACLE_MODEL_NAME = "models/asteroids/Asteroid_1.obj"  # Asteroid hazards.
+COIN_MODEL_NAME = "models/coins/coin.obj"  # Asset-backed coin pickup model.
+COIN_CHAIN_FORWARD_OFFSET = 2.2  # Forward/back spacing within coin pickup line.
+COIN_CHAIN_SIDE_OFFSET = 1.9  # Side coin offset for optional fourth pickup.
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,9 +66,6 @@ def build_fall_band_blueprints(
 ) -> tuple[FallingBlueprint, ...]:
     """Build one designed band with chained coins and structured obstacles."""
     blueprints: list[FallingBlueprint] = []
-    blueprints.extend(
-        _decor_shards_blueprints(y_position=y_position, band_index=band_index),
-    )
     blueprints.extend(
         _coin_chain_blueprints(y_position=y_position, band_index=band_index),
     )
@@ -100,13 +101,18 @@ def build_fall_band_blueprints(
             ),
         )
 
+    if band_index % 4 == 0:
+        blueprints.extend(
+            _extra_asteroid_blueprints(y_position=y_position, band_index=band_index),
+        )
+
     return tuple(blueprints)
 
 
 @lru_cache(maxsize=1024)
 def _path_center(band_index: int) -> Vec3:
     angle = band_index * 0.37
-    radius = (3.6 + (sin(band_index * 0.19) * 1.2)) * TUNNEL_WIDTH_SCALE
+    radius = (4.2 + (sin(band_index * 0.19) * 1.6)) * TUNNEL_WIDTH_SCALE
     return Vec3(cos(angle) * radius, 0.0, sin(angle * 0.87) * radius)
 
 
@@ -130,6 +136,10 @@ def _clamp_collidable_axis(value: float) -> float:
     return max(-MAX_COLLIDABLE_ABS, min(MAX_COLLIDABLE_ABS, value))
 
 
+def _clamp_coin_axis(value: float) -> float:
+    return max(-MAX_COIN_ABS, min(MAX_COIN_ABS, value))
+
+
 def _angular_distance(angle_a: float, angle_b: float) -> float:
     delta = abs((angle_a - angle_b) % tau)
     return min(delta, tau - delta)
@@ -147,7 +157,7 @@ def _obstacle_blueprint(
     return FallingBlueprint(
         name=name,
         entity_kind="obstacle",
-        model="cube",
+        model=OBSTACLE_MODEL_NAME,
         color_name=color_name,
         scale=scale,
         position=Vec3(
@@ -171,50 +181,36 @@ def _coin_blueprint(
     return FallingBlueprint(
         name=name,
         entity_kind="coin",
-        model="sphere",
+        model=COIN_MODEL_NAME,
         color_name=color_name,
         scale=Vec3(0.72, 0.72, 0.72),
         position=Vec3(
-            _clamp_collidable_axis(x_pos),
+            _clamp_coin_axis(x_pos),
             y_pos,
-            _clamp_collidable_axis(z_pos),
+            _clamp_coin_axis(z_pos),
         ),
         collision_radius=0.45,
         score_value=score_value,
     )
 
 
-def _decor_shards_blueprints(
+def _extra_asteroid_blueprints(
     *,
     y_position: float,
     band_index: int,
 ) -> tuple[FallingBlueprint, ...]:
-    first_angle = (band_index * 0.23) % tau
-    second_angle = (first_angle + (tau * 0.5)) % tau
+    """Add extra in-lane asteroid hazards to increase field density."""
+    center = _path_center(band_index)
+    first_lane = LANE_POSITIONS[(band_index + 1) % len(LANE_POSITIONS)]
+    second_lane = LANE_POSITIONS[(band_index + 3) % len(LANE_POSITIONS)]
     return (
-        FallingBlueprint(
-            name="decor_shard_primary",
-            entity_kind="decor",
-            model="cube",
-            color_name="dark_gray",
-            scale=Vec3(1.4, 0.45, 1.9),
-            position=Vec3(
-                cos(first_angle) * DECOR_RING_RADIUS,
-                y_position + 0.55,
-                sin(first_angle) * DECOR_RING_RADIUS,
-            ),
-        ),
-        FallingBlueprint(
-            name="decor_shard_secondary",
-            entity_kind="decor",
-            model="sphere",
-            color_name="smoke",
-            scale=Vec3(1.2, 1.2, 1.2),
-            position=Vec3(
-                cos(second_angle) * DECOR_RING_RADIUS,
-                y_position - 0.35,
-                sin(second_angle) * DECOR_RING_RADIUS,
-            ),
+        _obstacle_blueprint(
+            name="extra_asteroid_a",
+            x_pos=first_lane if band_index % 8 != 0 else second_lane,
+            y_pos=y_position,
+            z_pos=_lane_snap(center.z + (2.2 * TUNNEL_WIDTH_SCALE)),
+            scale=Vec3(1.45, 1.45, 1.45),
+            color_name="orange",
         ),
     )
 
@@ -231,9 +227,9 @@ def _coin_chain_blueprints(
     blueprints = [
         _coin_blueprint(
             name="coin_chain_lead",
-            x_pos=center.x - (direction.x * 1.2 * TUNNEL_WIDTH_SCALE),
+            x_pos=center.x - (direction.x * COIN_CHAIN_FORWARD_OFFSET),
             y_pos=y_position + 0.4,
-            z_pos=center.z - (direction.z * 1.2 * TUNNEL_WIDTH_SCALE),
+            z_pos=center.z - (direction.z * COIN_CHAIN_FORWARD_OFFSET),
         ),
         _coin_blueprint(
             name="coin_chain_center",
@@ -243,9 +239,9 @@ def _coin_chain_blueprints(
         ),
         _coin_blueprint(
             name="coin_chain_tail",
-            x_pos=center.x + (direction.x * 1.2 * TUNNEL_WIDTH_SCALE),
+            x_pos=center.x + (direction.x * COIN_CHAIN_FORWARD_OFFSET),
             y_pos=y_position + 0.4,
-            z_pos=center.z + (direction.z * 1.2 * TUNNEL_WIDTH_SCALE),
+            z_pos=center.z + (direction.z * COIN_CHAIN_FORWARD_OFFSET),
         ),
     ]
 
@@ -253,9 +249,9 @@ def _coin_chain_blueprints(
         blueprints.append(
             _coin_blueprint(
                 name="coin_chain_side",
-                x_pos=center.x + (side.x * 1.05 * TUNNEL_WIDTH_SCALE),
+                x_pos=center.x + (side.x * COIN_CHAIN_SIDE_OFFSET),
                 y_pos=y_position + 0.65,
-                z_pos=center.z + (side.z * 1.05 * TUNNEL_WIDTH_SCALE),
+                z_pos=center.z + (side.z * COIN_CHAIN_SIDE_OFFSET),
             ),
         )
 

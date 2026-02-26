@@ -87,14 +87,33 @@ NEBULA_COUNT = 4
 MOTION_MOTE_COUNT = 24
 MOTION_MOTE_VERTICAL_SPAN = 72.0
 ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets"
-SPACE_SKY_DIR = ASSETS_DIR / "NightSkyHDRI009_4K"
+SPACE_SKY_DIR = ASSETS_DIR / "sky" / "NightSkyHDRI009_4K"
 SPACE_SKY_TEXTURE_CANDIDATES = (
     "NightSkyHDRI009_4K_TONEMAPPED.jpg",
     "NightSkyHDRI009.png",
     "NightSkyHDRI009_4K_HDR.exr",
 )
-COIN_SFX_NAMES = ("driken5482-retro-coin-4-236671.mp3",)
-IMPACT_SFX_NAMES = ("explosionCrunch_000.ogg",)
+ASTEROID_MODEL_NAME = "models/asteroids/Asteroid_1.obj"
+ASTEROID_MODEL_VARIANTS: tuple[str, ...] = (
+    "models/asteroids/Asteroid_1.obj",
+    "models/asteroids/Rocky_Asteroid_2.obj",
+    "models/asteroids/Rocky_Asteroid_3.obj",
+    "models/asteroids/Rocky_Asteroid_4.obj",
+    "models/asteroids/Rocky_Asteroid_5.obj",
+    "models/asteroids/Rocky_Asteroid_6.obj",
+)
+ASTEROID_DIFFUSE_TEXTURE_BY_MODEL: dict[str, str] = {
+    "models/asteroids/Asteroid_1.obj": "models/asteroids/Textures_Asteroid_1/Asteroid_1_Diffuse_2K.png",
+    "models/asteroids/Rocky_Asteroid_2.obj": "models/asteroids/Textures_Rocky_Asteroid_2/Rocky_Asteroid_2_Diffuse_2K.png",
+    "models/asteroids/Rocky_Asteroid_3.obj": "models/asteroids/Textures_Rocky_Asteroid_3/Rocky_Asteroid_3_Diffuse_2K.png",
+    "models/asteroids/Rocky_Asteroid_4.obj": "models/asteroids/Textures_Rocky_Asteroid_4/Rocky_Asteroid_4_Diffuse_2K.png",
+    "models/asteroids/Rocky_Asteroid_5.obj": "models/asteroids/Textures_Rocky_Asteroid_5/Rocky_Asteroid_5_Diffuse_2K.png",
+    "models/asteroids/Rocky_Asteroid_6.obj": "models/asteroids/Textures_Rocky_Asteroid_6/Rocky_Asteroid_6_Diffuse_2K.png",
+}
+ASTEROID_SCALE_MIN = 0.6
+ASTEROID_SCALE_MAX = 2.5
+COIN_SFX_NAMES = ("audio/sfx/driken5482-retro-coin-4-236671.mp3",)
+IMPACT_SFX_NAMES = ("audio/sfx/explosionCrunch_000.ogg",)
 SCROLL_DIRECTION_BY_KEY = {
     "scroll up": 1,
     "scroll down": -1,
@@ -107,7 +126,9 @@ RECENTER_CAMERA_KEYS = {"c", "gamepad dpad left"}
 PAUSE_KEYS = {"p", "gamepad start"}
 POST_PROCESS_CYCLE_KEYS = {"t"}
 RENDER_MODE_TOGGLE_KEYS = {"y"}
-ANIMATION_CULL_DISTANCE = 85.0
+ANIMATION_CULL_DISTANCE = 170.0
+OBSTACLE_ANIMATION_CULL_DISTANCE = ANIMATION_CULL_DISTANCE * 3.0
+COIN_ANIMATION_CULL_DISTANCE = ANIMATION_CULL_DISTANCE * 2.0
 
 CAMERA_POST_PROCESS_OPTIONS: tuple[tuple[str, object | None], ...] = (
     ("Off", None),
@@ -140,9 +161,8 @@ def rgba_color(red: float, green: float, blue: float, alpha: float = 1.0) -> Col
 
 
 def mark_lit_shadowed(entity: Entity) -> Entity:
-    """Apply the project-default lit shader and shadow camera mask."""
+    """Apply the project-default lit shader without shadow casting."""
     entity.shader = LIT_SHADER
-    entity.show(0b0001)
     return entity
 
 
@@ -193,6 +213,31 @@ def discrete_value_in_range(
     variant_index = seed % clamped_variant_count
     interpolation = variant_index / (clamped_variant_count - 1)
     return minimum + ((maximum - minimum) * interpolation)
+
+
+def signed_speed_from_seed(
+    *,
+    seed: int,
+    variant_count: int,
+    minimum_magnitude: float,
+    maximum_magnitude: float,
+) -> float:
+    """Generate deterministic signed speed with bidirectional variance."""
+    magnitude = discrete_value_in_range(
+        seed=seed,
+        variant_count=variant_count,
+        minimum=minimum_magnitude,
+        maximum=maximum_magnitude,
+    )
+    direction = -1.0 if seed % 2 == 0 else 1.0
+    return magnitude * direction
+
+
+def choose_asteroid_variant(variation_seed: int) -> tuple[str, str]:
+    """Select deterministic asteroid model and diffuse texture by seed."""
+    variant_index = variation_seed % len(ASTEROID_MODEL_VARIANTS)
+    model_name = ASTEROID_MODEL_VARIANTS[variant_index]
+    return model_name, ASTEROID_DIFFUSE_TEXTURE_BY_MODEL[model_name]
 
 
 def configure_window(settings: GameSettings) -> None:
@@ -398,37 +443,16 @@ def configure_mouse_capture() -> None:
 
 
 def configure_lighting(focus_entity: Entity) -> LightingRig:
-    """Create one sun light and ambient fill with stable shadow bounds."""
+    """Create one sun light and ambient fill without drop shadows."""
     sun_direction = Vec3(0.75, -1.2, -0.45).normalized()
-    key_light = DirectionalLight(shadows=True, shadow_map_resolution=Vec2(2048, 2048))
+    key_light = DirectionalLight(shadows=False)
     key_light.color = color_module.white
     key_light.look_at(sun_direction)
 
     ambient_light = AmbientLight()
     ambient_light.color = color_module.rgba(0.24, 0.26, 0.31, 1.0)
 
-    scene.set_shader_input("shadow_color", color_module.black66)
-    scene.set_shader_input("shadow_blur", 0.0008)
-    scene.set_shader_input("shadow_bias", 0.0005)
-    scene.set_shader_input("shadow_samples", 3)
-
-    shadow_bounds = Entity(
-        name="shadow_bounds_focus",
-        parent=focus_entity,
-        model="cube",
-        position=Vec3(0.0, -20.0, 0.0),
-        scale=Vec3(64.0, 84.0, 64.0),
-        color=color_module.clear,
-        unlit=True,
-    )
-    key_light.update_bounds(shadow_bounds)
-
-    shadow_controller = Entity(name="shadow_bounds_controller")
-
-    def update_shadow_bounds() -> None:
-        key_light.update_bounds(shadow_bounds)
-
-    shadow_controller.update = update_shadow_bounds
+    _ = focus_entity
 
     return LightingRig(key_light=key_light, ambient_light=ambient_light)
 
@@ -540,15 +564,15 @@ def update_atmosphere_for_depth(
 
     backdrop_state.sky.color = lerp_rgb_color((7, 10, 24), (145, 186, 214), progress)
     lighting_rig.ambient_light.color = color_module.rgba(
-        lerp_scalar(0.12, 0.38, progress),
-        lerp_scalar(0.15, 0.42, progress),
-        lerp_scalar(0.24, 0.48, progress),
+        0.28,
+        0.28,
+        0.28,
         1.0,
     )
     lighting_rig.key_light.color = color_module.rgba(
-        lerp_scalar(0.65, 1.0, progress),
-        lerp_scalar(0.72, 0.95, progress),
-        lerp_scalar(0.82, 0.9, progress),
+        0.98,
+        0.98,
+        0.98,
         1.0,
     )
 
@@ -594,12 +618,7 @@ def update_atmosphere_for_depth(
             lerp_scalar(0.08, 0.32, speed_factor),
         )
 
-    backdrop_state.depth_overlay.color = rgba_color(
-        lerp_scalar(0.03, 0.16, progress),
-        lerp_scalar(0.08, 0.25, progress),
-        lerp_scalar(0.16, 0.38, progress),
-        lerp_scalar(0.02, 0.14, progress),
-    )
+    backdrop_state.depth_overlay.color = rgba_color(0.0, 0.0, 0.0, 0.0)
 
 
 def spawn_entity_from_blueprint(
@@ -610,6 +629,12 @@ def spawn_entity_from_blueprint(
     gameplay_settings: GameplayTuningSettings,
 ) -> SpawnedObject:
     """Spawn one band blueprint as an Ursina entity and runtime record."""
+    variation_seed = (band_index * 41) + (blueprint_index * 17)
+    spawn_model = blueprint.model
+    spawn_texture: str | None = None
+    if blueprint.entity_kind == "obstacle" and blueprint.model == ASTEROID_MODEL_NAME:
+        spawn_model, spawn_texture = choose_asteroid_variant(variation_seed)
+
     entity_name = (
         f"fall_band_{band_index}_"
         f"{blueprint.entity_kind}_"
@@ -618,7 +643,7 @@ def spawn_entity_from_blueprint(
     )
     entity = Entity(
         name=entity_name,
-        model=blueprint.model,
+        model=spawn_model,
         color=resolve_color(blueprint.color_name),
         scale=Vec3(blueprint.scale.x, blueprint.scale.y, blueprint.scale.z),
         position=Vec3(
@@ -627,39 +652,51 @@ def spawn_entity_from_blueprint(
             blueprint.position.z,
         ),
     )
+    if spawn_texture is not None:
+        entity.texture = spawn_texture
 
-    variation_seed = (band_index * 41) + (blueprint_index * 17)
     base_scale = Vec3(entity.scale.x, entity.scale.y, entity.scale.z)
 
-    spin_speed = 0.0
-    rock_speed = 0.0
+    spin_speed_x = 0.0
+    spin_speed_y = 0.0
+    spin_speed_z = 0.0
     bob_amplitude = 0.0
     bob_frequency = 0.0
     pulse_amplitude = 0.0
     pulse_frequency = 0.0
+    drift_speed_x = 0.0
+    drift_speed_z = 0.0
     fade_duration = gameplay_settings.spawn_fade_duration_seconds
 
     target_color = resolve_color(blueprint.color_name)
 
     if blueprint.entity_kind == "coin":
-        entity.unlit = True
-        target_color = rgba_color(1.0, 0.95, 0.25, 1.0)
+        mark_lit_shadowed(entity)
+        entity.unlit = False
+        entity.texture = None
+        target_color = rgba_color(1.0, 0.92, 0.22, 1.0)
         is_high_value_coin = blueprint.score_value > COIN_SCORE_VALUE
         should_render_coin_halo = deterministic_probability_hit(
             seed=variation_seed + 13,
             probability=gameplay_settings.high_value_coin_halo_chance,
         )
-        if is_high_value_coin and should_render_coin_halo:
-            Entity(
-                parent=entity,
-                name=f"{entity_name}_coin_halo",
-                model="sphere",
-                scale=Vec3(1.68, 1.68, 1.68),
-                color=rgba_color(1.0, 0.93, 0.3, 0.2),
-                unlit=True,
-            )
-            target_color = rgba_color(1.0, 0.85, 0.2, 1.0)
-        spin_speed = 0.0
+        if is_high_value_coin:
+            target_color = rgba_color(1.0, 0.84, 0.18, 1.0)
+            if should_render_coin_halo:
+                Entity(
+                    parent=entity,
+                    name=f"{entity_name}_coin_halo",
+                    model=spawn_model,
+                    scale=Vec3(1.18, 1.18, 1.18),
+                    color=rgba_color(1.0, 0.92, 0.3, 0.18),
+                    unlit=True,
+                )
+        spin_speed_x = 0.0
+        spin_speed_y = (88.0 + ((blueprint_index % 4) * 16.0)) * 0.3
+        spin_speed_z = 0.0
+        entity.rotation_x = -6.0 + ((blueprint_index % 5) * 3.0)
+        entity.rotation_y = ((band_index * 26.0) + (blueprint_index * 32.0)) % 360.0
+        entity.rotation_z = -4.0 + ((blueprint_index % 4) * 2.5)
         bob_amplitude = 0.08 + ((variation_seed % 4) * 0.03)
         bob_frequency = 2.5 + ((variation_seed % 5) * 0.36)
         pulse_amplitude = 0.08 + ((variation_seed % 3) * 0.03)
@@ -667,33 +704,63 @@ def spawn_entity_from_blueprint(
     else:
         mark_lit_shadowed(entity)
         if blueprint.entity_kind == "obstacle":
-            should_render_obstacle_halo = deterministic_probability_hit(
-                seed=variation_seed + 29,
-                probability=gameplay_settings.obstacle_halo_chance,
-            )
-            if should_render_obstacle_halo:
-                Entity(
-                    parent=entity,
-                    name=f"{entity_name}_obstacle_halo",
-                    model=blueprint.model,
-                    scale=Vec3(1.22, 1.22, 1.22),
-                    color=rgba_color(1.0, 0.45, 0.28, 0.12),
-                    unlit=True,
+            if blueprint.model == ASTEROID_MODEL_NAME:
+                target_color = resolve_color("white")
+                entity.unlit = True
+                entity.rotation_x = (variation_seed * 37) % 360
+                entity.rotation_y = (variation_seed * 53) % 360
+                entity.rotation_z = (variation_seed * 29) % 360
+                scale_multiplier = discrete_value_in_range(
+                    seed=variation_seed + 53,
+                    variant_count=11,
+                    minimum=ASTEROID_SCALE_MIN,
+                    maximum=ASTEROID_SCALE_MAX,
                 )
-            spin_speed = discrete_value_in_range(
-                seed=variation_seed,
-                variant_count=gameplay_settings.obstacle_spin_variants,
-                minimum=gameplay_settings.obstacle_spin_speed_min,
-                maximum=gameplay_settings.obstacle_spin_speed_max,
+                entity.scale = Vec3(
+                    entity.scale.x * scale_multiplier,
+                    entity.scale.y * scale_multiplier,
+                    entity.scale.z * scale_multiplier,
+                )
+                base_scale = Vec3(entity.scale.x, entity.scale.y, entity.scale.z)
+                should_drift = deterministic_probability_hit(
+                    seed=variation_seed + 71,
+                    probability=0.3,
+                )
+                if should_drift:
+                    drift_speed_x = signed_speed_from_seed(
+                        seed=variation_seed + 73,
+                        variant_count=13,
+                        minimum_magnitude=0.8,
+                        maximum_magnitude=2.2,
+                    )
+                    drift_speed_z = signed_speed_from_seed(
+                        seed=variation_seed + 79,
+                        variant_count=9,
+                        minimum_magnitude=0.2,
+                        maximum_magnitude=0.9,
+                    )
+            spin_speed_x = signed_speed_from_seed(
+                seed=variation_seed + 5,
+                variant_count=gameplay_settings.obstacle_spin_variants + 6,
+                minimum_magnitude=gameplay_settings.obstacle_spin_speed_min,
+                maximum_magnitude=gameplay_settings.obstacle_spin_speed_max,
             )
-            rock_speed = discrete_value_in_range(
-                seed=variation_seed,
-                variant_count=gameplay_settings.obstacle_rock_variants,
-                minimum=gameplay_settings.obstacle_rock_speed_min,
-                maximum=gameplay_settings.obstacle_rock_speed_max,
+            spin_speed_y = signed_speed_from_seed(
+                seed=variation_seed + 11,
+                variant_count=gameplay_settings.obstacle_spin_variants + 10,
+                minimum_magnitude=gameplay_settings.obstacle_spin_speed_min,
+                maximum_magnitude=gameplay_settings.obstacle_spin_speed_max,
+            )
+            spin_speed_z = signed_speed_from_seed(
+                seed=variation_seed + 19,
+                variant_count=gameplay_settings.obstacle_rock_variants + 10,
+                minimum_magnitude=abs(gameplay_settings.obstacle_rock_speed_min),
+                maximum_magnitude=abs(gameplay_settings.obstacle_rock_speed_max),
             )
         else:
-            rock_speed = 6.0 + ((variation_seed % 5) * 2.5)
+            spin_speed_x = 0.0
+            spin_speed_y = 6.0 + ((variation_seed % 5) * 2.5)
+            spin_speed_z = 0.0
 
     target_rgba = (
         cast("float", target_color.r),
@@ -706,16 +773,22 @@ def spawn_entity_from_blueprint(
     return SpawnedObject(
         entity=entity,
         entity_kind=blueprint.entity_kind,
-        model_name=blueprint.model,
+        model_name=spawn_model,
         collision_radius=blueprint.collision_radius,
         score_value=blueprint.score_value,
-        spin_speed=spin_speed,
-        rock_speed=rock_speed,
+        spin_speed_x=spin_speed_x,
+        spin_speed_y=spin_speed_y,
+        spin_speed_z=spin_speed_z,
         bob_amplitude=bob_amplitude,
         bob_frequency=bob_frequency,
         pulse_amplitude=pulse_amplitude,
         pulse_frequency=pulse_frequency,
+        base_x=entity.x,
         base_y=entity.y,
+        base_z=entity.z,
+        drift_speed_x=drift_speed_x,
+        drift_speed_z=drift_speed_z,
+        drift_progress=0.0,
         base_scale=base_scale,
         spawn_time=monotonic(),
         fade_duration=fade_duration,
@@ -987,14 +1060,25 @@ def animate_spawned_objects(
                     target_alpha * alpha_blend,
                 )
 
-        if abs(spawned.entity.y - player_y) > ANIMATION_CULL_DISTANCE:
+        cull_distance = (
+            COIN_ANIMATION_CULL_DISTANCE
+            if spawned.entity_kind == "coin"
+            else (
+                OBSTACLE_ANIMATION_CULL_DISTANCE
+                if spawned.entity_kind == "obstacle"
+                else ANIMATION_CULL_DISTANCE
+            )
+        )
+        if abs(spawned.entity.y - player_y) > cull_distance:
+            if spawned.drift_speed_x != 0.0 or spawned.drift_speed_z != 0.0:
+                spawned.drift_blend = 0.0
             continue
 
         is_sphere_model = spawned.model_name in {"sphere", "icosphere"}
 
         if spawned.entity_kind == "coin":
             if not is_sphere_model:
-                spawned.entity.rotation_y += spawned.spin_speed * dt
+                spawned.entity.rotation_y += spawned.spin_speed_y * dt
             if spawned.bob_amplitude > 0.0:
                 spawned.entity.y = spawned.base_y + (
                     sin(
@@ -1019,8 +1103,19 @@ def animate_spawned_objects(
             continue
 
         if not is_sphere_model:
-            spawned.entity.rotation_y += spawned.spin_speed * dt
-            spawned.entity.rotation_x += spawned.rock_speed * dt
+            spawned.entity.rotation_x += spawned.spin_speed_x * dt
+            spawned.entity.rotation_y += spawned.spin_speed_y * dt
+            spawned.entity.rotation_z += spawned.spin_speed_z * dt
+            if spawned.drift_speed_x != 0.0 or spawned.drift_speed_z != 0.0:
+                spawned.drift_blend = min(1.0, spawned.drift_blend + (dt * 1.6))
+                blended_dt = dt * spawned.drift_blend
+                spawned.drift_progress += blended_dt
+                spawned.entity.x = spawned.base_x + (
+                    spawned.drift_progress * spawned.drift_speed_x
+                )
+                spawned.entity.z = spawned.base_z + (
+                    spawned.drift_progress * spawned.drift_speed_z
+                )
 
 
 def update_camera_tracking(
@@ -1161,6 +1256,7 @@ def install_game_controller(
         player.rotation = Vec3(0.0, 0.0, 0.0)
         motion_state.horizontal_speed = 0.0
         motion_state.depth_speed = 0.0
+        motion_state.yaw_turn_speed = 0.0
         camera_state.yaw_angle = 0.0
         camera_state.pitch_angle = settings.camera.start_pitch
         camera_state.distance = settings.camera.distance
@@ -1209,6 +1305,14 @@ def install_game_controller(
             return
 
         if run_state.is_paused:
+            motion_state.yaw_turn_speed = compute_smoothed_lateral_speed(
+                current_speed=motion_state.yaw_turn_speed,
+                axis_input=0.0,
+                max_speed=settings.movement.yaw_turn_speed,
+                acceleration_rate=settings.movement.yaw_turn_accel_rate,
+                deceleration_rate=settings.movement.yaw_turn_decel_rate,
+                dt=dt,
+            )
             camera_state.yaw_angle, camera_state.pitch_angle = compute_look_angles(
                 yaw_angle=camera_state.yaw_angle,
                 pitch_angle=camera_state.pitch_angle,
@@ -1237,8 +1341,15 @@ def install_game_controller(
             max_pitch=settings.camera.max_pitch,
         )
 
-        yaw_turn_delta = yaw_turn_axis * settings.movement.yaw_turn_speed * dt
-        camera_state.yaw_angle += yaw_turn_delta
+        motion_state.yaw_turn_speed = compute_smoothed_lateral_speed(
+            current_speed=motion_state.yaw_turn_speed,
+            axis_input=yaw_turn_axis,
+            max_speed=settings.movement.yaw_turn_speed,
+            acceleration_rate=settings.movement.yaw_turn_accel_rate,
+            deceleration_rate=settings.movement.yaw_turn_decel_rate,
+            dt=dt,
+        )
+        camera_state.yaw_angle += motion_state.yaw_turn_speed * dt
         player.rotation_y = camera_state.yaw_angle
 
         fall_speed = apply_player_movement(

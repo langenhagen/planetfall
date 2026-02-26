@@ -28,6 +28,7 @@ class MotionState:
 
     horizontal_speed: float = 0.0
     depth_speed: float = 0.0
+    yaw_turn_speed: float = 0.0
 
 
 @dataclass(slots=True)
@@ -39,13 +40,20 @@ class SpawnedObject:
     model_name: str
     collision_radius: float
     score_value: int
-    spin_speed: float = 0.0
-    rock_speed: float = 0.0
+    spin_speed_x: float = 0.0
+    spin_speed_y: float = 0.0
+    spin_speed_z: float = 0.0
     bob_amplitude: float = 0.0
     bob_frequency: float = 0.0
     pulse_amplitude: float = 0.0
     pulse_frequency: float = 0.0
+    base_x: float = 0.0
     base_y: float = 0.0
+    base_z: float = 0.0
+    drift_speed_x: float = 0.0
+    drift_speed_z: float = 0.0
+    drift_progress: float = 0.0
+    drift_blend: float = 0.0
     base_scale: Vec3 = field(default_factory=lambda: Vec3(1.0, 1.0, 1.0))
     spawn_time: float = 0.0
     fade_duration: float = 0.0

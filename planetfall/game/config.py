@@ -14,7 +14,9 @@ class MovementSettings:
     depth_accel_rate: float = 4.96
     depth_decel_rate: float = 0.5
     yaw_turn_speed: float = 130.0
-    play_area_radius: float = 30.0
+    yaw_turn_accel_rate: float = 3.2
+    yaw_turn_decel_rate: float = 1.2
+    play_area_radius: float = 75.0
     tilt_degrees: float = 64.0
 
 
@@ -22,12 +24,12 @@ class MovementSettings:
 class FallSettings:
     """Vertical speed and endless spawning window settings."""
 
-    base_speed: float = 26.0
+    base_speed: float = 40.3
     boost_multiplier: float = 1.15
     brake_multiplier: float = 0.55
     recovery_height: float = 12.0
     recovery_score_penalty: int = 35
-    spawn_ahead_distance: float = 300.0
+    spawn_ahead_distance: float = 600.0
     cleanup_above_distance: float = 52.0
     initial_spawn_y: float = -36.0
 
