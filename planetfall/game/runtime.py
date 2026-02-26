@@ -1402,7 +1402,13 @@ def install_game_controller(
 def run_game(settings: GameSettings | None = None) -> None:
     """Run the endless third-person falling game."""
     active_settings = GameSettings() if settings is None else settings
-    app = cast("object", Ursina(development_mode=active_settings.development_mode))
+    app = cast(
+        "object",
+        Ursina(
+            title=active_settings.window_title,
+            development_mode=active_settings.development_mode,
+        ),
+    )
     application.asset_folder = Path(__file__).resolve().parents[2]
 
     configure_window(active_settings)
