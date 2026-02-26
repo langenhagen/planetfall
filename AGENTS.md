@@ -87,6 +87,12 @@ Interpret these tokens as explicit workflow commands:
 
 - `mc`, `cm`, or `commit`
   - Identify how many commits to make then make them.
+  - Default to multiple commits whenever there are multiple intents.
+  - Do not bundle unrelated intents into one commit.
+  - Use this minimum split when applicable:
+    - feature/runtime behavior changes and according tests,
+    - refactor/import-path/style-only changes,
+    - docs/config-only changes.
   - Commit message must follow this structure:
     - First line: short summary (50 chars or less), imperative mood.
     - Second line: blank.
