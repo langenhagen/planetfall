@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-
+#
 # Capture periodic screenshots from an X11 window.
 #
 # This script is intentionally generic so it can be reused across projects.

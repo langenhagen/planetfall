@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-
+#
 # Capture Ursina game window screenshots into a timestamped run folder.
 #
 # This is a project-specific wrapper around scripts/capture-window.sh.
