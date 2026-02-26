@@ -15,6 +15,8 @@ class RunStateLike(Protocol):
     collected_orbs: int
     deepest_y: float
     reset_count: int
+    post_effect_name: str
+    render_mode_name: str
 
 
 def create_controls_hint() -> Text:
@@ -32,6 +34,8 @@ def create_controls_hint() -> Text:
             "Zoom: mouse wheel / dpad up-down\n"
             "Pause: p / start\n"
             "Recenter: c / dpad left\n"
+            "Post FX: t\n"
+            "Render mode: y\n"
             "Restart: r\n"
             "UI: u"
         ),
@@ -75,7 +79,7 @@ def depth_zone_label(depth: float) -> str:
 
 
 def update_status_text(run_state: RunStateLike, status_text: Text) -> None:
-    """Render current score, depth, and reset count into the HUD."""
+    """Render current score, depth, reset, and debug display status."""
     depth = max(0.0, -run_state.deepest_y)
     status_text.text = (
         f"Score: {run_state.score}\n"

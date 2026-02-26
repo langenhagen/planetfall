@@ -97,10 +97,21 @@ SCROLL_DIRECTION_BY_KEY = {
     "gamepad dpad down": -1,
 }
 RESTART_KEYS = {"r"}
-TOGGLE_CONTROLS_KEYS = {"u", "gamepad y"}
+TOGGLE_CONTROLS_KEYS = {"u"}
 RECENTER_CAMERA_KEYS = {"c", "gamepad dpad left"}
 PAUSE_KEYS = {"p", "gamepad start"}
+POST_PROCESS_CYCLE_KEYS = {"t"}
+RENDER_MODE_TOGGLE_KEYS = {"y"}
 ANIMATION_CULL_DISTANCE = 85.0
+
+CAMERA_POST_PROCESS_OPTIONS: tuple[tuple[str, object | None], ...] = (
+    ("Off", None),
+    ("SSAO", cast("object", ursina_shaders.ssao_shader)),
+    (
+        "Vertical Blur",
+        cast("object", ursina_shaders.camera_vertical_blur_shader),
+    ),
+)
 
 
 @dataclass(slots=True)
@@ -162,6 +173,8 @@ class FallingRunState:
     next_band_index: int = 0
     next_band_y: float = 0.0
     last_hit_time: float = 0.0
+    post_effect_name: str = "Off"
+    render_mode_name: str = "default"
     spawned_objects: list[SpawnedObject] = field(default_factory=list)
 
 
@@ -400,10 +413,40 @@ def update_player_visual_state(
         )
 
 
+@lru_cache(maxsize=8)
+def resolve_optional_shader(module_path: str, shader_name: str) -> object | None:
+    """Resolve one shader object dynamically when available in this Ursina build."""
+    with suppress(Exception):
+        module = importlib.import_module(module_path)
+        shader = getattr(module, shader_name, None)
+        if shader is not None:
+            return cast("object", shader)
+    return None
+
+
 def configure_camera() -> None:
     """Set up base camera parent and transform defaults."""
     camera.parent = scene
     camera.rotation = Vec3(0.0, 0.0, 0.0)
+
+
+def apply_camera_post_process(shader: object | None) -> None:
+    """Apply one camera post process shader, or fully disable post process."""
+    if shader is None:
+        filter_manager = getattr(camera, "filter_manager", None)
+        if filter_manager is not None:
+            with suppress(Exception):
+                filter_manager.cleanup()
+        filter_quad = getattr(camera, "filter_quad", None)
+        if filter_quad is not None:
+            with suppress(Exception):
+                filter_quad.removeNode()
+        camera.filter_manager = None
+        camera.filter_quad = None
+        camera._shader = None
+        return
+
+    camera.shader = shader
 
 
 def create_camera_orbit_rig(settings: GameSettings) -> OrbitRig:
@@ -820,6 +863,8 @@ def initialize_run_state(
     run_state.next_band_index = 0
     run_state.next_band_y = fall_settings.initial_spawn_y
     run_state.last_hit_time = 0.0
+    run_state.post_effect_name = CAMERA_POST_PROCESS_OPTIONS[0][0]
+    run_state.render_mode_name = cast("str", getattr(window, "render_mode", "default"))
 
 
 def destroy_entity_tree(entity: Entity) -> None:
@@ -1150,6 +1195,8 @@ def install_game_controller(
     motion_state = MotionState()
     run_state = FallingRunState()
     initialize_run_state(run_state, settings.fall)
+    post_process_index = 0
+    apply_camera_post_process(CAMERA_POST_PROCESS_OPTIONS[post_process_index][1])
 
     def reset_run() -> None:
         destroy_spawned_objects(run_state.spawned_objects)
@@ -1162,6 +1209,11 @@ def install_game_controller(
         camera_state.yaw_angle = 0.0
         camera_state.pitch_angle = settings.camera.start_pitch
         camera_state.distance = settings.camera.distance
+        run_state.post_effect_name = CAMERA_POST_PROCESS_OPTIONS[post_process_index][0]
+        run_state.render_mode_name = cast(
+            "str", getattr(window, "render_mode", "default")
+        )
+        apply_camera_post_process(CAMERA_POST_PROCESS_OPTIONS[post_process_index][1])
         pause_text.enabled = False
         spawn_bands_ahead(
             run_state=run_state,
@@ -1290,12 +1342,32 @@ def install_game_controller(
         update_status_text(run_state, status_text)
 
     def controller_input(key: str) -> None:
+        nonlocal post_process_index
+
         if key == "escape":
             application.quit()
             return
 
         if key in TOGGLE_CONTROLS_KEYS:
             controls_hint.enabled = not controls_hint.enabled
+
+        if key in POST_PROCESS_CYCLE_KEYS:
+            post_process_index = (post_process_index + 1) % len(
+                CAMERA_POST_PROCESS_OPTIONS
+            )
+            post_name, post_shader = CAMERA_POST_PROCESS_OPTIONS[post_process_index]
+            apply_camera_post_process(post_shader)
+            run_state.post_effect_name = post_name
+            update_status_text(run_state, status_text)
+            return
+
+        if key in RENDER_MODE_TOGGLE_KEYS:
+            current_mode = cast("str", getattr(window, "render_mode", "default"))
+            next_mode = "wireframe" if current_mode != "wireframe" else "default"
+            window.render_mode = next_mode
+            run_state.render_mode_name = next_mode
+            update_status_text(run_state, status_text)
+            return
 
         if key in PAUSE_KEYS:
             run_state.is_paused = not run_state.is_paused
