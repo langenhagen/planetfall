@@ -47,6 +47,7 @@ Prefer repo-local, reproducible commands:
   - `xdotool` in conjunction with capture scripts to automate mouse and keyboard input scenarios while collecting screenshots/logs.
 - Run tests: `uv run pytest`.
 - Run linter: `uv run ruff check .`.
+- Run dead-code sweep liberally: `uv run vulture planetfall/`.
 - Run security scan: `uv run --group lint semgrep --config=p/ci --error --metrics=off planetfall tests`.
 - Format code: `uv run ruff format .`.
 - Run type checks: `uv run mypy planetfall`.
