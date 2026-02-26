@@ -1,0 +1,14 @@
+# Blender MTL File: 'Rocky_Asteroid_4.blend'
+# Material Count: 1
+
+newmtl Rocky_Asteroid_4
+Ns 96.078431
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Kd Textures_Rocky_Asteroid_4/Rocky_Asteroid_4_Diffuse_1K.png
+map_Bump Textures_Rocky_Asteroid_4/Rocky_Asteroid_4_Normal_1K.png
