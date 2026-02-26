@@ -2,7 +2,6 @@
 
 import importlib
 from contextlib import suppress
-from dataclasses import dataclass, field
 from functools import lru_cache
 from math import cos, sin, tau
 from pathlib import Path
@@ -31,7 +30,13 @@ from ursina import (
 )
 from ursina.main import Ursina
 
-from .config import CameraSettings, FallSettings, GameSettings, MovementSettings
+from .config import (
+    CameraSettings,
+    FallSettings,
+    GameplayTuningSettings,
+    GameSettings,
+    MovementSettings,
+)
 from .runtime_controls import (
     clamp_to_play_area,
     compute_control_axes,
@@ -43,6 +48,17 @@ from .runtime_controls import (
     rotate_planar_velocity_by_yaw,
     should_despawn_object,
     should_spawn_next_band,
+)
+from .runtime_postfx import next_post_process_option, toggle_render_mode
+from .runtime_state import (
+    BackdropState,
+    CameraState,
+    FallingRunState,
+    LightingRig,
+    MotionState,
+    OrbitRig,
+    PlayerVisualState,
+    SpawnedObject,
 )
 from .runtime_ui import (
     create_controls_hint,
@@ -63,7 +79,6 @@ if TYPE_CHECKING:
 
 LIT_SHADER = cast("object", ursina_shaders.lit_with_shadows_shader)
 PLAYER_COLLISION_RADIUS = 0.95
-OBSTACLE_HIT_COOLDOWN_SECONDS = 0.45
 RUN_RANDOM_SEED = 20260224
 PLANET_APPROACH_DEPTH = 1600.0
 STARFIELD_COUNT = 36
@@ -114,95 +129,6 @@ CAMERA_POST_PROCESS_OPTIONS: tuple[tuple[str, object | None], ...] = (
 )
 
 
-@dataclass(slots=True)
-class OrbitRig:
-    """Camera yaw/pitch pivot entities for third-person orbit motion."""
-
-    yaw_pivot: Entity
-    pitch_pivot: Entity
-
-
-@dataclass(slots=True)
-class CameraState:
-    """Mutable camera state for orbit look and zoom behavior."""
-
-    yaw_angle: float
-    pitch_angle: float
-    distance: float
-
-
-@dataclass(slots=True)
-class MotionState:
-    """Mutable player movement speeds for gentle acceleration/deceleration."""
-
-    horizontal_speed: float = 0.0
-    depth_speed: float = 0.0
-
-
-@dataclass(slots=True)
-class SpawnedObject:
-    """Runtime state for one spawned world object."""
-
-    entity: Entity
-    entity_kind: str
-    model_name: str
-    collision_radius: float
-    score_value: int
-    spin_speed: float = 0.0
-    rock_speed: float = 0.0
-    bob_amplitude: float = 0.0
-    bob_frequency: float = 0.0
-    pulse_amplitude: float = 0.0
-    pulse_frequency: float = 0.0
-    base_y: float = 0.0
-    base_scale: Vec3 = field(default_factory=lambda: Vec3(1.0, 1.0, 1.0))
-    spawn_time: float = 0.0
-    fade_duration: float = 0.0
-    target_rgba: tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)
-
-
-@dataclass(slots=True)
-class FallingRunState:
-    """Mutable run-state values tracked across gameplay frames."""
-
-    score: int = 0
-    collected_orbs: int = 0
-    reset_count: int = 0
-    deepest_y: float = 0.0
-    is_paused: bool = False
-    next_band_index: int = 0
-    next_band_y: float = 0.0
-    last_hit_time: float = 0.0
-    spawned_objects: list[SpawnedObject] = field(default_factory=list)
-
-
-@dataclass(frozen=True, slots=True)
-class LightingRig:
-    """Runtime references for lighting entities that change with depth."""
-
-    key_light: DirectionalLight
-    ambient_light: AmbientLight
-
-
-@dataclass(frozen=True, slots=True)
-class BackdropState:
-    """Runtime references for sky, stars, and atmosphere ambience entities."""
-
-    sky: Entity
-    stars: tuple[Entity, ...]
-    nebulae: tuple[Entity, ...]
-    motion_motes: tuple[Entity, ...]
-    depth_overlay: Entity
-
-
-@dataclass(frozen=True, slots=True)
-class PlayerVisualState:
-    """Runtime references for player contrails and glow visuals."""
-
-    contrails: tuple[Entity, ...]
-    aura: Entity
-
-
 class GamepadVibrateCallable(Protocol):
     """Callable protocol for Ursina's optional gamepad vibrate hook."""
 
@@ -248,6 +174,35 @@ def lerp_rgb_color(
     green = round(lerp_scalar(float(start_rgb[1]), float(end_rgb[1]), clamped_factor))
     blue = round(lerp_scalar(float(start_rgb[2]), float(end_rgb[2]), clamped_factor))
     return rgba_color(red / 255.0, green / 255.0, blue / 255.0, 1.0)
+
+
+def deterministic_probability_hit(*, seed: int, probability: float) -> bool:
+    """Return deterministic pseudo-random chance hit from integer seed."""
+    clamped_probability = max(0.0, min(1.0, probability))
+    if clamped_probability <= 0.0:
+        return False
+    if clamped_probability >= 1.0:
+        return True
+
+    hashed_seed = (seed * 1_103_515_245 + 12_345) & 0x7FFFFFFF
+    return (hashed_seed / 0x80000000) < clamped_probability
+
+
+def discrete_value_in_range(
+    *,
+    seed: int,
+    variant_count: int,
+    minimum: float,
+    maximum: float,
+) -> float:
+    """Map an integer seed to one of N evenly spaced values in a range."""
+    if variant_count <= 1:
+        return minimum
+
+    clamped_variant_count = max(2, variant_count)
+    variant_index = seed % clamped_variant_count
+    interpolation = variant_index / (clamped_variant_count - 1)
+    return minimum + ((maximum - minimum) * interpolation)
 
 
 def configure_window(settings: GameSettings) -> None:
@@ -662,6 +617,7 @@ def spawn_entity_from_blueprint(
     blueprint: FallingBlueprint,
     band_index: int,
     blueprint_index: int,
+    gameplay_settings: GameplayTuningSettings,
 ) -> SpawnedObject:
     """Spawn one band blueprint as an Ursina entity and runtime record."""
     entity_name = (
@@ -691,7 +647,7 @@ def spawn_entity_from_blueprint(
     bob_frequency = 0.0
     pulse_amplitude = 0.0
     pulse_frequency = 0.0
-    fade_duration = 0.16
+    fade_duration = gameplay_settings.spawn_fade_duration_seconds
 
     target_color = resolve_color(blueprint.color_name)
 
@@ -699,7 +655,11 @@ def spawn_entity_from_blueprint(
         entity.unlit = True
         target_color = rgba_color(1.0, 0.95, 0.25, 1.0)
         is_high_value_coin = blueprint.score_value > COIN_SCORE_VALUE
-        if is_high_value_coin:
+        should_render_coin_halo = deterministic_probability_hit(
+            seed=variation_seed + 13,
+            probability=gameplay_settings.high_value_coin_halo_chance,
+        )
+        if is_high_value_coin and should_render_coin_halo:
             Entity(
                 parent=entity,
                 name=f"{entity_name}_coin_halo",
@@ -717,7 +677,11 @@ def spawn_entity_from_blueprint(
     else:
         mark_lit_shadowed(entity)
         if blueprint.entity_kind == "obstacle":
-            if variation_seed % 3 == 0:
+            should_render_obstacle_halo = deterministic_probability_hit(
+                seed=variation_seed + 29,
+                probability=gameplay_settings.obstacle_halo_chance,
+            )
+            if should_render_obstacle_halo:
                 Entity(
                     parent=entity,
                     name=f"{entity_name}_obstacle_halo",
@@ -726,8 +690,18 @@ def spawn_entity_from_blueprint(
                     color=rgba_color(1.0, 0.45, 0.28, 0.12),
                     unlit=True,
                 )
-            spin_speed = 16.0 + ((variation_seed % 7) * 6.0)
-            rock_speed = -12.0 + ((variation_seed % 9) * 3.0)
+            spin_speed = discrete_value_in_range(
+                seed=variation_seed,
+                variant_count=gameplay_settings.obstacle_spin_variants,
+                minimum=gameplay_settings.obstacle_spin_speed_min,
+                maximum=gameplay_settings.obstacle_spin_speed_max,
+            )
+            rock_speed = discrete_value_in_range(
+                seed=variation_seed,
+                variant_count=gameplay_settings.obstacle_rock_variants,
+                minimum=gameplay_settings.obstacle_rock_speed_min,
+                maximum=gameplay_settings.obstacle_rock_speed_max,
+            )
         else:
             rock_speed = 6.0 + ((variation_seed % 5) * 2.5)
 
@@ -872,6 +846,7 @@ def spawn_bands_ahead(
     player_y: float,
     rng: Random,
     fall_settings: FallSettings,
+    gameplay_settings: GameplayTuningSettings,
 ) -> None:
     """Spawn new obstacle/coin bands until the ahead window is filled."""
     while should_spawn_next_band(
@@ -890,6 +865,7 @@ def spawn_bands_ahead(
                     blueprint=blueprint,
                     band_index=run_state.next_band_index,
                     blueprint_index=blueprint_index,
+                    gameplay_settings=gameplay_settings,
                 ),
             )
 
@@ -936,6 +912,7 @@ def process_collisions(
     motion_state: MotionState,
     run_state: FallingRunState,
     fall_settings: FallSettings,
+    gameplay_settings: GameplayTuningSettings,
 ) -> None:
     """Handle collisions with coins and obstacles for score and reset behavior."""
     now = monotonic()
@@ -963,7 +940,10 @@ def process_collisions(
             continue
 
         if spawned.entity_kind == "obstacle":
-            if now - run_state.last_hit_time < OBSTACLE_HIT_COOLDOWN_SECONDS:
+            if (
+                now - run_state.last_hit_time
+                < gameplay_settings.obstacle_hit_cooldown_seconds
+            ):
                 survivors.append(spawned)
                 continue
 
@@ -1201,6 +1181,7 @@ def install_game_controller(
             player_y=player.y,
             rng=randomizer,
             fall_settings=settings.fall,
+            gameplay_settings=settings.gameplay,
         )
         update_atmosphere_for_depth(
             player=player,
@@ -1288,6 +1269,7 @@ def install_game_controller(
             player_y=player.y,
             rng=randomizer,
             fall_settings=settings.fall,
+            gameplay_settings=settings.gameplay,
         )
         animate_spawned_objects(run_state, dt, player.y)
         process_collisions(
@@ -1295,6 +1277,7 @@ def install_game_controller(
             motion_state=motion_state,
             run_state=run_state,
             fall_settings=settings.fall,
+            gameplay_settings=settings.gameplay,
         )
         cleanup_passed_objects(
             run_state=run_state,
@@ -1333,17 +1316,17 @@ def install_game_controller(
             controls_hint.enabled = not controls_hint.enabled
 
         if key in POST_PROCESS_CYCLE_KEYS:
-            post_process_index = (post_process_index + 1) % len(
-                CAMERA_POST_PROCESS_OPTIONS
+            post_process_index, _, post_shader = next_post_process_option(
+                current_index=post_process_index,
+                options=CAMERA_POST_PROCESS_OPTIONS,
             )
-            _, post_shader = CAMERA_POST_PROCESS_OPTIONS[post_process_index]
             apply_camera_post_process(post_shader)
             update_status_text(run_state, status_text)
             return
 
         if key in RENDER_MODE_TOGGLE_KEYS:
             current_mode = cast("str", getattr(window, "render_mode", "default"))
-            next_mode = "wireframe" if current_mode != "wireframe" else "default"
+            next_mode = toggle_render_mode(current_mode)
             window.render_mode = next_mode
             update_status_text(run_state, status_text)
             return

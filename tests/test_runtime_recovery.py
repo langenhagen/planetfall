@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from ursina import Vec3
 
-from planetfall.game.config import FallSettings
+from planetfall.game.config import FallSettings, GameplayTuningSettings
 from planetfall.game.runtime import (
     FallingRunState,
     MotionState,
@@ -83,6 +83,7 @@ def test_process_collisions_keeps_obstacle_during_hit_cooldown() -> None:
             motion_state=MotionState(),
             run_state=run_state,
             fall_settings=FallSettings(),
+            gameplay_settings=GameplayTuningSettings(),
         )
 
     CHECKER.assertFalse(destroy_mock.called)

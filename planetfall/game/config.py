@@ -33,6 +33,22 @@ class FallSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class GameplayTuningSettings:
+    """Tunable gameplay constants used across spawn and collision systems."""
+
+    obstacle_hit_cooldown_seconds: float = 0.45
+    spawn_fade_duration_seconds: float = 0.16
+    high_value_coin_halo_chance: float = 1.0
+    obstacle_halo_chance: float = 1.0 / 3.0
+    obstacle_spin_speed_min: float = 16.0
+    obstacle_spin_speed_max: float = 52.0
+    obstacle_rock_speed_min: float = -12.0
+    obstacle_rock_speed_max: float = 12.0
+    obstacle_spin_variants: int = 7
+    obstacle_rock_variants: int = 9
+
+
+@dataclass(frozen=True, slots=True)
 class CameraSettings:
     """Third-person orbit camera settings for the falling avatar."""
 
@@ -57,4 +73,5 @@ class GameSettings:
     development_mode: bool = True
     movement: MovementSettings = field(default_factory=MovementSettings)
     fall: FallSettings = field(default_factory=FallSettings)
+    gameplay: GameplayTuningSettings = field(default_factory=GameplayTuningSettings)
     camera: CameraSettings = field(default_factory=CameraSettings)
