@@ -68,13 +68,13 @@ pyenv local 3.14.3
 # create/update virtual environment and dependencies
 uv sync
 
-# launch the Ursina game
+# launch the game
 uv run planetfall
 
 # run quality checks
 uv run ruff check .
 uv run ruff format .
-uv run mypy planetfall
+uv run mypy planetfall/
 uv run pytest
 
 # install git hooks
@@ -110,4 +110,4 @@ scripts/capture-window.sh --name "ursina" --out __debug/screens --frames 60
 ```
 
 You can combine capture scripts with `xdotool` input automation for repeatable
-fall scenarios and visual debugging.
+fall scenarios and visual debugging. Just saying.
