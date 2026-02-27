@@ -116,7 +116,7 @@ ASTEROID_DIFFUSE_TEXTURE_BY_MODEL: dict[str, str] = {
 }
 ASTEROID_SCALE_MIN = 0.6
 ASTEROID_SCALE_MAX = 2.5
-COIN_SFX_NAMES = ("audio/sfx/driken5482-retro-coin-4-236671.mp3",)
+COIN_SFX_NAMES = ("audio/sfx/345297_6212127-lq.mp3",)
 IMPACT_SFX_NAMES = ("audio/sfx/explosionCrunch_000.ogg",)
 SCROLL_DIRECTION_BY_KEY = {
     "scroll up": 1,
