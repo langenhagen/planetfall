@@ -41,7 +41,6 @@ class GameplayTuningSettings:
     obstacle_hit_cooldown_seconds: float = 0.45
     spawn_fade_duration_seconds: float = 0.16
     high_value_coin_halo_chance: float = 1.0
-    obstacle_halo_chance: float = 1.0 / 3.0
     obstacle_spin_speed_min: float = 16.0
     obstacle_spin_speed_max: float = 52.0
     obstacle_rock_speed_min: float = -12.0
