@@ -72,6 +72,7 @@ class GameSettings:
     borderless: bool = False
     fullscreen: bool = False
     development_mode: bool = True
+    window_size: tuple[int, int] | None = None
     movement: MovementSettings = field(default_factory=MovementSettings)
     fall: FallSettings = field(default_factory=FallSettings)
     gameplay: GameplayTuningSettings = field(default_factory=GameplayTuningSettings)
