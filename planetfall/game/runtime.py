@@ -521,20 +521,9 @@ def create_space_backdrop() -> BackdropState:
         for mote_index in range(MOTION_MOTE_COUNT)
     ]
 
-    depth_overlay = Entity(
-        parent=camera.ui,
-        name="depth_color_overlay",
-        model="quad",
-        z=1.0,
-        scale=Vec2(2.2, 1.3),
-        color=rgba_color(0.04, 0.08, 0.18, 0.0),
-        unlit=True,
-    )
-
     return BackdropState(
         sky=sky_entity,
         motion_motes=tuple(motion_motes),
-        depth_overlay=depth_overlay,
     )
 
 
@@ -734,8 +723,6 @@ def update_atmosphere_for_depth(
             1.0,
             lerp_scalar(0.08, 0.32, speed_factor),
         )
-
-    backdrop_state.depth_overlay.color = rgba_color(0.0, 0.0, 0.0, 0.0)
 
 
 def spawn_entity_from_blueprint(

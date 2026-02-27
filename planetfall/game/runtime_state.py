@@ -93,7 +93,6 @@ class BackdropState:
 
     sky: Entity
     motion_motes: tuple[Entity, ...]
-    depth_overlay: Entity
 
 
 @dataclass(frozen=True, slots=True)
