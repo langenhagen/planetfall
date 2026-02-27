@@ -130,6 +130,9 @@ ASTEROID_SCALE_MIN = 0.6
 ASTEROID_SCALE_MAX = 2.5
 COIN_SFX_NAMES = ("audio/sfx/345297_6212127-lq.mp3",)
 IMPACT_SFX_NAMES = ("audio/sfx/explosionCrunch_000.ogg",)
+BOOST_LOOP_SFX_NAMES = ("audio/sfx/freesound_community-loopingthrust-95548.mp3",)
+BOOST_LOOP_VOLUME = 0.7
+BOOST_LOOP_FADE_SECONDS = 0.4
 SCROLL_DIRECTION_BY_KEY = {
     "scroll up": 1,
     "scroll down": -1,
@@ -965,6 +968,18 @@ def play_obstacle_hit_sfx() -> None:
         play_sfx_clip(clip_name="sine", volume=1.0, pitch=1.0)
 
 
+def resolve_boost_loop_clip() -> str | None:
+    """Resolve the looping boost audio clip name."""
+    with suppress(Exception):
+        boost_path = resolve_sfx_path(
+            preferred_names=BOOST_LOOP_SFX_NAMES,
+            fallback_pattern="*thrust*.*",
+        )
+        if boost_path is not None:
+            return boost_path.name
+    return None
+
+
 @lru_cache(maxsize=8)
 def resolve_sfx_path(
     *,
@@ -1402,6 +1417,7 @@ def install_game_controller(
 ) -> Entity:
     """Attach per-frame gameplay update and input handlers."""
     music_state: dict[str, Audio | None] = {"track": None}
+    boost_state: dict[str, Audio | None] = {"track": None}
     controller = Entity(name="fall_game_controller")
     randomizer = Random(RUN_RANDOM_SEED)  # noqa: S311  # nosec B311
     camera_state = CameraState(
@@ -1415,6 +1431,7 @@ def install_game_controller(
     post_process_index = 0
     apply_camera_post_process(CAMERA_POST_PROCESS_OPTIONS[post_process_index][1])
     music_playlist = build_music_playlist()
+    boost_clip_name = resolve_boost_loop_clip()
 
     def reset_run() -> None:
         destroy_spawned_objects(run_state.spawned_objects)
@@ -1432,6 +1449,8 @@ def install_game_controller(
         pause_text.enabled = False
         if music_state["track"] is not None:
             music_state["track"].play()
+        if boost_state["track"] is not None:
+            boost_state["track"].stop()
         spawn_bands_ahead(
             run_state=run_state,
             player_y=player.y,
@@ -1483,6 +1502,8 @@ def install_game_controller(
         if run_state.is_paused:
             if music_state["track"] is not None and music_state["track"].playing:
                 music_state["track"].pause()
+            if boost_state["track"] is not None and boost_state["track"].playing:
+                boost_state["track"].pause()
             motion_state.yaw_turn_speed = compute_smoothed_lateral_speed(
                 current_speed=motion_state.yaw_turn_speed,
                 axis_input=0.0,
@@ -1542,6 +1563,26 @@ def install_game_controller(
             dt=dt,
         )
         run_state.deepest_y = min(run_state.deepest_y, player.y)
+
+        if boost_clip_name is not None and dive_axis > 0.05:
+            if boost_state["track"] is None or not boost_state["track"].playing:
+                audio_factory: Any = Audio
+                boost_state["track"] = audio_factory(
+                    boost_clip_name,
+                    loop=True,
+                    autoplay=True,
+                    volume=BOOST_LOOP_VOLUME,
+                )
+            else:
+                boost_state["track"].volume = BOOST_LOOP_VOLUME
+        elif boost_state["track"] is not None and boost_state["track"].playing:
+            fade_speed = BOOST_LOOP_VOLUME / max(0.01, BOOST_LOOP_FADE_SECONDS)
+            boost_state["track"].volume = max(
+                0.0,
+                boost_state["track"].volume - (fade_speed * dt),
+            )
+            if boost_state["track"].volume <= 0.0:
+                boost_state["track"].pause()
 
         spawn_bands_ahead(
             run_state=run_state,
