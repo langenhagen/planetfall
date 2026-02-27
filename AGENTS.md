@@ -102,7 +102,7 @@ Interpret these tokens as explicit workflow commands:
 
 - `bigcheck` or `big check`
   - Run and act on this full local sweep:
-    - `source .venv/bin/activate; rf; l3; pre-commit run --all; pytest`
+    - `source .venv/bin/activate; rf; l3; uv run vulture planetfall/; pre-commit run --all; pytest`
   - Treat failures as actionable, fix them, and re-run until green when feasible.
 
 ## Commit Workflow Expectations
