@@ -58,6 +58,10 @@ class SpawnedObject:
     spawn_time: float = 0.0
     fade_duration: float = 0.0
     target_rgba: tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)
+    is_collecting: bool = False
+    collect_started_at: float = 0.0
+    collect_duration: float = 0.0
+    collect_start_position: Vec3 = field(default_factory=lambda: Vec3(0.0, 0.0, 0.0))
 
 
 @dataclass(slots=True)

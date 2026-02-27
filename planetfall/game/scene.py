@@ -189,7 +189,7 @@ def _coin_blueprint(
             y_pos,
             _clamp_coin_axis(z_pos),
         ),
-        collision_radius=0.45,
+        collision_radius=2.5,
         score_value=score_value,
     )
 

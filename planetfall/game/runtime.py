@@ -133,6 +133,7 @@ RENDER_MODE_TOGGLE_KEYS = {"y"}
 ANIMATION_CULL_DISTANCE = 170.0
 OBSTACLE_ANIMATION_CULL_DISTANCE = ANIMATION_CULL_DISTANCE * 3.0
 COIN_ANIMATION_CULL_DISTANCE = ANIMATION_CULL_DISTANCE * 2.0
+COIN_COLLECT_ANIMATION_SECONDS = 0.18
 
 CAMERA_POST_PROCESS_OPTIONS: tuple[tuple[str, object | None], ...] = (
     ("Off", None),
@@ -1113,10 +1114,19 @@ def process_collisions(
             continue
 
         if spawned.entity_kind == "coin":
-            destroy_entity_tree(spawned.entity)
+            spawned.is_collecting = True
+            spawned.collect_started_at = now
+            spawned.collect_duration = COIN_COLLECT_ANIMATION_SECONDS
+            spawned.collect_start_position = Vec3(
+                spawned.entity.position.x,
+                spawned.entity.position.y,
+                spawned.entity.position.z,
+            )
+            spawned.collision_radius = 0.0
             run_state.collected_orbs += 1
             run_state.score += spawned.score_value
             play_coin_pickup_sfx()
+            survivors.append(spawned)
             continue
 
         if spawned.entity_kind == "obstacle":
@@ -1152,10 +1162,43 @@ def animate_spawned_objects(
     run_state: FallingRunState,
     dt: float,
     player_y: float,
+    player_position: Vec3,
 ) -> None:
     """Animate collectibles and obstacles for richer motion language."""
     runtime_time = monotonic()
+    survivors: list[SpawnedObject] = []
     for spawned in run_state.spawned_objects:
+        if spawned.entity_kind == "coin" and spawned.is_collecting:
+            collect_duration = max(0.001, spawned.collect_duration)
+            collect_progress = max(
+                0.0,
+                min(
+                    1.0,
+                    (runtime_time - spawned.collect_started_at) / collect_duration,
+                ),
+            )
+            collect_ease = 1.0 - ((1.0 - collect_progress) ** 3)
+            collect_target = Vec3(
+                player_position.x,
+                player_position.y + 0.45,
+                player_position.z,
+            )
+            spawned.entity.position = spawned.collect_start_position + (
+                (collect_target - spawned.collect_start_position) * collect_ease
+            )
+            collect_scale = max(0.0, 1.0 - collect_progress)
+            spawned.entity.scale = Vec3(
+                spawned.base_scale.x * collect_scale,
+                spawned.base_scale.y * collect_scale,
+                spawned.base_scale.z * collect_scale,
+            )
+            if collect_progress >= 1.0:
+                destroy_entity_tree(spawned.entity)
+                continue
+
+            survivors.append(spawned)
+            continue
+
         if spawned.fade_duration > 0.0:
             target_red, target_green, target_blue, target_alpha = spawned.target_rgba
             elapsed = runtime_time - spawned.spawn_time
@@ -1189,6 +1232,7 @@ def animate_spawned_objects(
         if abs(spawned.entity.y - player_y) > cull_distance:
             if spawned.drift_speed_x != 0.0 or spawned.drift_speed_z != 0.0:
                 spawned.drift_blend = 0.0
+            survivors.append(spawned)
             continue
 
         is_sphere_model = spawned.model_name in {"sphere", "icosphere"}
@@ -1217,6 +1261,7 @@ def animate_spawned_objects(
                     spawned.base_scale.y * pulse_scale,
                     spawned.base_scale.z * pulse_scale,
                 )
+            survivors.append(spawned)
             continue
 
         if not is_sphere_model:
@@ -1233,6 +1278,10 @@ def animate_spawned_objects(
                 spawned.entity.z = spawned.base_z + (
                     spawned.drift_progress * spawned.drift_speed_z
                 )
+
+        survivors.append(spawned)
+
+    run_state.spawned_objects = survivors
 
 
 def update_camera_tracking(
@@ -1489,7 +1538,7 @@ def install_game_controller(
             fall_settings=settings.fall,
             gameplay_settings=settings.gameplay,
         )
-        animate_spawned_objects(run_state, dt, player.y)
+        animate_spawned_objects(run_state, dt, player.y, player.position)
         process_collisions(
             player=player,
             motion_state=motion_state,
