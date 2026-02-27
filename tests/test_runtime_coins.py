@@ -107,4 +107,5 @@ def test_animate_spawned_objects_destroys_coin_after_collect_animation() -> None
         )
 
     CHECKER.assertTrue(destroy_mock.called)
+    CHECKER.assertGreater(coin_entity.scale.x, 0.0)
     CHECKER.assertEqual(run_state.spawned_objects, [])

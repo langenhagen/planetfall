@@ -1177,6 +1177,12 @@ def animate_spawned_objects(
                     (runtime_time - spawned.collect_started_at) / collect_duration,
                 ),
             )
+            # Keep transforms invertible; a zero-scale frame can trigger
+            # Panda's has_mat() assertion in render/cull internals.
+            if collect_progress >= 1.0:
+                destroy_entity_tree(spawned.entity)
+                continue
+
             collect_ease = 1.0 - ((1.0 - collect_progress) ** 3)
             collect_target = Vec3(
                 player_position.x,
@@ -1192,9 +1198,6 @@ def animate_spawned_objects(
                 spawned.base_scale.y * collect_scale,
                 spawned.base_scale.z * collect_scale,
             )
-            if collect_progress >= 1.0:
-                destroy_entity_tree(spawned.entity)
-                continue
 
             survivors.append(spawned)
             continue
