@@ -89,11 +89,9 @@ class LightingRig:
 
 @dataclass(frozen=True, slots=True)
 class BackdropState:
-    """Runtime references for sky, stars, and atmosphere ambience entities."""
+    """Runtime references for sky and atmosphere ambience entities."""
 
     sky: Entity
-    stars: tuple[Entity, ...]
-    nebulae: tuple[Entity, ...]
     motion_motes: tuple[Entity, ...]
     depth_overlay: Entity
 

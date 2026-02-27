@@ -509,49 +509,6 @@ def create_space_backdrop() -> BackdropState:
     sky_entity = sky_factory()
     initialize_sky_texture_blend_state(sky_entity)
 
-    stars: list[Entity] = []
-    nebulae: list[Entity] = []
-
-    for star_index in range(STARFIELD_COUNT):
-        angle = (tau / STARFIELD_COUNT) * star_index
-        radius = STARFIELD_RADIUS + ((star_index % 9) * 4.1)
-        star_y = 52.0 + ((star_index % 11) * 11.0)
-        if star_index % 2:
-            star_y *= 0.57
-        star_size = 0.1 + ((star_index % 5) * 0.03)
-        star = Entity(
-            parent=sky_entity,
-            name=f"space_star_{star_index}",
-            model="icosphere",
-            scale=Vec3(star_size, star_size, star_size),
-            position=Vec3(cos(angle) * radius, star_y, sin(angle) * radius),
-            color=color_module.rgba(1.0, 1.0, 1.0, 1.0),
-            unlit=True,
-        )
-        stars.append(star)
-
-    for nebula_index in range(NEBULA_COUNT):
-        angle = (tau / NEBULA_COUNT) * nebula_index
-        radius = 38.0 + (nebula_index * 6.0)
-        nebula = Entity(
-            parent=sky_entity,
-            name=f"space_nebula_{nebula_index}",
-            model="icosphere",
-            position=Vec3(
-                cos(angle) * radius,
-                18.0 + (nebula_index * 5.0),
-                sin(angle) * radius,
-            ),
-            scale=Vec3(
-                20.0 + (nebula_index * 2.5),
-                12.0 + nebula_index,
-                20.0 + (nebula_index * 2.5),
-            ),
-            color=rgba_color(0.2, 0.33, 0.58, 0.07),
-            unlit=True,
-        )
-        nebulae.append(nebula)
-
     motion_motes = [
         Entity(
             name=f"atmo_mote_{mote_index}",
@@ -576,8 +533,6 @@ def create_space_backdrop() -> BackdropState:
 
     return BackdropState(
         sky=sky_entity,
-        stars=tuple(stars),
-        nebulae=tuple(nebulae),
         motion_motes=tuple(motion_motes),
         depth_overlay=depth_overlay,
     )
@@ -756,25 +711,6 @@ def update_atmosphere_for_depth(
         0.98,
         1.0,
     )
-
-    star_alpha = max(0.0, 1.0 - (progress * 1.35))
-    for star_index, star in enumerate(backdrop_state.stars):
-        twinkle = 0.62 + (sin((runtime_time * 1.7) + (star_index * 0.57)) * 0.38)
-        star.color = color_module.rgba(1.0, 1.0, 1.0, max(0.0, star_alpha * twinkle))
-
-    for nebula_index, nebula in enumerate(backdrop_state.nebulae):
-        orbit_phase = (runtime_time * 0.06) + (nebula_index * 0.9)
-        orbit_radius = 40.0 + (nebula_index * 5.5)
-        nebula.x = player.x * 0.08 + (cos(orbit_phase) * orbit_radius)
-        nebula.y = 16.0 + (sin((runtime_time * 0.2) + nebula_index) * 6.0)
-        nebula.z = player.z * 0.08 + (sin(orbit_phase) * orbit_radius)
-        nebula.rotation_y = (runtime_time * (2.4 + nebula_index)) % 360.0
-        nebula.color = rgba_color(
-            lerp_scalar(0.18, 0.42, progress),
-            lerp_scalar(0.3, 0.5, progress),
-            lerp_scalar(0.55, 0.74, progress),
-            lerp_scalar(0.04, 0.14, progress),
-        )
 
     speed_factor = max(0.0, min(1.0, (fall_speed - 12.0) / 34.0))
     mote_thickness = lerp_scalar(0.05, 0.09, speed_factor)
