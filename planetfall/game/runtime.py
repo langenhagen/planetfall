@@ -107,12 +107,24 @@ ASTEROID_MODEL_VARIANTS: tuple[str, ...] = (
     "models/asteroids/Rocky_Asteroid_6.obj",
 )
 ASTEROID_DIFFUSE_TEXTURE_BY_MODEL: dict[str, str] = {
-    "models/asteroids/Asteroid_1.obj": "models/asteroids/Textures_Asteroid_1/Asteroid_1_Diffuse_1K.png",
-    "models/asteroids/Rocky_Asteroid_2.obj": "models/asteroids/Textures_Rocky_Asteroid_2/Rocky_Asteroid_2_Diffuse_1K.png",
-    "models/asteroids/Rocky_Asteroid_3.obj": "models/asteroids/Textures_Rocky_Asteroid_3/Rocky_Asteroid_3_Diffuse_1K.png",
-    "models/asteroids/Rocky_Asteroid_4.obj": "models/asteroids/Textures_Rocky_Asteroid_4/Rocky_Asteroid_4_Diffuse_1K.png",
-    "models/asteroids/Rocky_Asteroid_5.obj": "models/asteroids/Textures_Rocky_Asteroid_5/Rocky_Asteroid_5_Diffuse_1K.png",
-    "models/asteroids/Rocky_Asteroid_6.obj": "models/asteroids/Textures_Rocky_Asteroid_6/Rocky_Asteroid_6_Diffuse_1K.png",
+    "models/asteroids/Asteroid_1.obj": (
+        "models/asteroids/Textures_Asteroid_1/Asteroid_1_Diffuse_1K.png"
+    ),
+    "models/asteroids/Rocky_Asteroid_2.obj": (
+        "models/asteroids/Textures_Rocky_Asteroid_2/Rocky_Asteroid_2_Diffuse_1K.png"
+    ),
+    "models/asteroids/Rocky_Asteroid_3.obj": (
+        "models/asteroids/Textures_Rocky_Asteroid_3/Rocky_Asteroid_3_Diffuse_1K.png"
+    ),
+    "models/asteroids/Rocky_Asteroid_4.obj": (
+        "models/asteroids/Textures_Rocky_Asteroid_4/Rocky_Asteroid_4_Diffuse_1K.png"
+    ),
+    "models/asteroids/Rocky_Asteroid_5.obj": (
+        "models/asteroids/Textures_Rocky_Asteroid_5/Rocky_Asteroid_5_Diffuse_1K.png"
+    ),
+    "models/asteroids/Rocky_Asteroid_6.obj": (
+        "models/asteroids/Textures_Rocky_Asteroid_6/Rocky_Asteroid_6_Diffuse_1K.png"
+    ),
 }
 ASTEROID_SCALE_MIN = 0.6
 ASTEROID_SCALE_MAX = 2.5
@@ -215,6 +227,7 @@ def lerp_rgb_color(
     return rgba_color(red / 255.0, green / 255.0, blue / 255.0, 1.0)
 
 
+@lru_cache(maxsize=2048)
 def deterministic_probability_hit(*, seed: int, probability: float) -> bool:
     """Return deterministic pseudo-random chance hit from integer seed."""
     clamped_probability = max(0.0, min(1.0, probability))
@@ -227,6 +240,7 @@ def deterministic_probability_hit(*, seed: int, probability: float) -> bool:
     return (hashed_seed / 0x80000000) < clamped_probability
 
 
+@lru_cache(maxsize=2048)
 def discrete_value_in_range(
     *,
     seed: int,
@@ -244,6 +258,7 @@ def discrete_value_in_range(
     return minimum + ((maximum - minimum) * interpolation)
 
 
+@lru_cache(maxsize=2048)
 def signed_speed_from_seed(
     *,
     seed: int,
@@ -262,6 +277,7 @@ def signed_speed_from_seed(
     return magnitude * direction
 
 
+@lru_cache(maxsize=256)
 def choose_asteroid_variant(variation_seed: int) -> tuple[str, str]:
     """Select deterministic asteroid model and diffuse texture by seed."""
     variant_index = variation_seed % len(ASTEROID_MODEL_VARIANTS)
@@ -503,38 +519,38 @@ def create_space_backdrop() -> BackdropState:
         if star_index % 2:
             star_y *= 0.57
         star_size = 0.1 + ((star_index % 5) * 0.03)
-        stars.append(
-            Entity(
-                name=f"space_star_{star_index}",
-                model="icosphere",
-                scale=Vec3(star_size, star_size, star_size),
-                position=Vec3(cos(angle) * radius, star_y, sin(angle) * radius),
-                color=color_module.rgba(1.0, 1.0, 1.0, 1.0),
-                unlit=True,
-            ),
+        star = Entity(
+            parent=sky_entity,
+            name=f"space_star_{star_index}",
+            model="icosphere",
+            scale=Vec3(star_size, star_size, star_size),
+            position=Vec3(cos(angle) * radius, star_y, sin(angle) * radius),
+            color=color_module.rgba(1.0, 1.0, 1.0, 1.0),
+            unlit=True,
         )
+        stars.append(star)
 
     for nebula_index in range(NEBULA_COUNT):
         angle = (tau / NEBULA_COUNT) * nebula_index
         radius = 38.0 + (nebula_index * 6.0)
-        nebulae.append(
-            Entity(
-                name=f"space_nebula_{nebula_index}",
-                model="icosphere",
-                position=Vec3(
-                    cos(angle) * radius,
-                    18.0 + (nebula_index * 5.0),
-                    sin(angle) * radius,
-                ),
-                scale=Vec3(
-                    20.0 + (nebula_index * 2.5),
-                    12.0 + nebula_index,
-                    20.0 + (nebula_index * 2.5),
-                ),
-                color=rgba_color(0.2, 0.33, 0.58, 0.07),
-                unlit=True,
+        nebula = Entity(
+            parent=sky_entity,
+            name=f"space_nebula_{nebula_index}",
+            model="icosphere",
+            position=Vec3(
+                cos(angle) * radius,
+                18.0 + (nebula_index * 5.0),
+                sin(angle) * radius,
             ),
+            scale=Vec3(
+                20.0 + (nebula_index * 2.5),
+                12.0 + nebula_index,
+                20.0 + (nebula_index * 2.5),
+            ),
+            color=rgba_color(0.2, 0.33, 0.58, 0.07),
+            unlit=True,
         )
+        nebulae.append(nebula)
 
     motion_motes = [
         Entity(
@@ -574,6 +590,52 @@ def resolve_space_sky_texture_path() -> Path | None:
         if candidate.exists():
             return candidate
     return None
+
+
+@lru_cache(maxsize=8)
+def resolve_music_paths() -> tuple[Path, ...]:
+    """Resolve all available background music tracks."""
+    music_dir = ASSETS_DIR / "audio" / "music"
+    if not music_dir.exists():
+        return ()
+    return tuple(sorted(path for path in music_dir.glob("*.mp3") if path.is_file()))
+
+
+def build_music_playlist() -> list[Path]:
+    """Build a shuffled playlist of all available music tracks."""
+    playlist = list(resolve_music_paths())
+    Random().shuffle(playlist)  # noqa: S311  # nosec B311 - non-crypto shuffle.
+    return playlist
+
+
+def start_music_track(track_path: Path) -> Audio:
+    """Start a single background music track (non-looping)."""
+    relative_track = track_path.relative_to(ASSETS_DIR.parent).as_posix()
+    audio_factory: Any = Audio
+    return audio_factory(
+        relative_track,
+        loop=False,
+        autoplay=True,
+        auto_destroy=True,
+        volume=0.6,
+    )
+
+
+def advance_music_playlist(
+    *,
+    current_track: Audio | None,
+    playlist: list[Path],
+) -> Audio | None:
+    """Advance to the next track when the current one finishes."""
+    if current_track is not None and current_track.playing:
+        return current_track
+
+    if not playlist:
+        playlist.extend(build_music_playlist())
+        if not playlist:
+            return None
+
+    return start_music_track(playlist.pop(0))
 
 
 def resolve_space_sky_texture_paths() -> tuple[Path, ...]:
@@ -638,7 +700,8 @@ def update_sky_texture_blend(sky_entity: Entity, runtime_time: float) -> None:
         return
 
     cycle_start = cast(
-        "float", getattr(sky_entity, "_sky_blend_cycle_start", runtime_time)
+        "float",
+        getattr(sky_entity, "_sky_blend_cycle_start", runtime_time),
     )
     current_index = cast("int", getattr(sky_entity, "_sky_blend_current", 0))
     next_index = cast("int", getattr(sky_entity, "_sky_blend_next", 1))
@@ -822,6 +885,10 @@ def spawn_entity_from_blueprint(
     else:
         mark_lit_shadowed(entity)
         if blueprint.entity_kind == "obstacle":
+            should_spin = deterministic_probability_hit(
+                seed=variation_seed + 3,
+                probability=0.7,
+            )
             if blueprint.model == ASTEROID_MODEL_NAME:
                 target_color = resolve_color("white")
                 entity.unlit = True
@@ -840,41 +907,43 @@ def spawn_entity_from_blueprint(
                     entity.scale.z * scale_multiplier,
                 )
                 base_scale = Vec3(entity.scale.x, entity.scale.y, entity.scale.z)
-                should_drift = deterministic_probability_hit(
-                    seed=variation_seed + 71,
-                    probability=0.3,
+                if should_spin:
+                    should_drift = deterministic_probability_hit(
+                        seed=variation_seed + 71,
+                        probability=0.3,
+                    )
+                    if should_drift:
+                        drift_speed_x = signed_speed_from_seed(
+                            seed=variation_seed + 73,
+                            variant_count=13,
+                            minimum_magnitude=0.8,
+                            maximum_magnitude=2.2,
+                        )
+                        drift_speed_z = signed_speed_from_seed(
+                            seed=variation_seed + 79,
+                            variant_count=9,
+                            minimum_magnitude=0.2,
+                            maximum_magnitude=0.9,
+                        )
+            if should_spin:
+                spin_speed_x = signed_speed_from_seed(
+                    seed=variation_seed + 5,
+                    variant_count=gameplay_settings.obstacle_spin_variants + 6,
+                    minimum_magnitude=gameplay_settings.obstacle_spin_speed_min,
+                    maximum_magnitude=gameplay_settings.obstacle_spin_speed_max,
                 )
-                if should_drift:
-                    drift_speed_x = signed_speed_from_seed(
-                        seed=variation_seed + 73,
-                        variant_count=13,
-                        minimum_magnitude=0.8,
-                        maximum_magnitude=2.2,
-                    )
-                    drift_speed_z = signed_speed_from_seed(
-                        seed=variation_seed + 79,
-                        variant_count=9,
-                        minimum_magnitude=0.2,
-                        maximum_magnitude=0.9,
-                    )
-            spin_speed_x = signed_speed_from_seed(
-                seed=variation_seed + 5,
-                variant_count=gameplay_settings.obstacle_spin_variants + 6,
-                minimum_magnitude=gameplay_settings.obstacle_spin_speed_min,
-                maximum_magnitude=gameplay_settings.obstacle_spin_speed_max,
-            )
-            spin_speed_y = signed_speed_from_seed(
-                seed=variation_seed + 11,
-                variant_count=gameplay_settings.obstacle_spin_variants + 10,
-                minimum_magnitude=gameplay_settings.obstacle_spin_speed_min,
-                maximum_magnitude=gameplay_settings.obstacle_spin_speed_max,
-            )
-            spin_speed_z = signed_speed_from_seed(
-                seed=variation_seed + 19,
-                variant_count=gameplay_settings.obstacle_rock_variants + 10,
-                minimum_magnitude=abs(gameplay_settings.obstacle_rock_speed_min),
-                maximum_magnitude=abs(gameplay_settings.obstacle_rock_speed_max),
-            )
+                spin_speed_y = signed_speed_from_seed(
+                    seed=variation_seed + 11,
+                    variant_count=gameplay_settings.obstacle_spin_variants + 10,
+                    minimum_magnitude=gameplay_settings.obstacle_spin_speed_min,
+                    maximum_magnitude=gameplay_settings.obstacle_spin_speed_max,
+                )
+                spin_speed_z = signed_speed_from_seed(
+                    seed=variation_seed + 19,
+                    variant_count=gameplay_settings.obstacle_rock_variants + 10,
+                    minimum_magnitude=abs(gameplay_settings.obstacle_rock_speed_min),
+                    maximum_magnitude=abs(gameplay_settings.obstacle_rock_speed_max),
+                )
         else:
             spin_speed_x = 0.0
             spin_speed_y = 6.0 + ((variation_seed % 5) * 2.5)
@@ -1104,11 +1173,16 @@ def process_collisions(
             survivors.append(spawned)
             continue
 
+        hit_radius = PLAYER_COLLISION_RADIUS + spawned.collision_radius
+        delta_y = spawned.entity.y - player.y
+        if abs(delta_y) > hit_radius:
+            survivors.append(spawned)
+            continue
+
         delta = spawned.entity.position - player.position
         distance_squared = (
             (delta.x * delta.x) + (delta.y * delta.y) + (delta.z * delta.z)
         )
-        hit_radius = PLAYER_COLLISION_RADIUS + spawned.collision_radius
         if distance_squared > (hit_radius * hit_radius):
             survivors.append(spawned)
             continue
@@ -1404,6 +1478,7 @@ def install_game_controller(
     pause_text: Text,
 ) -> Entity:
     """Attach per-frame gameplay update and input handlers."""
+    music_state: dict[str, Audio | None] = {"track": None}
     controller = Entity(name="fall_game_controller")
     randomizer = Random(RUN_RANDOM_SEED)  # noqa: S311  # nosec B311
     camera_state = CameraState(
@@ -1416,6 +1491,7 @@ def install_game_controller(
     initialize_run_state(run_state, settings.fall)
     post_process_index = 0
     apply_camera_post_process(CAMERA_POST_PROCESS_OPTIONS[post_process_index][1])
+    music_playlist = build_music_playlist()
 
     def reset_run() -> None:
         destroy_spawned_objects(run_state.spawned_objects)
@@ -1431,6 +1507,8 @@ def install_game_controller(
         camera_state.distance = settings.camera.distance
         apply_camera_post_process(CAMERA_POST_PROCESS_OPTIONS[post_process_index][1])
         pause_text.enabled = False
+        if music_state["track"] is not None:
+            music_state["track"].play()
         spawn_bands_ahead(
             run_state=run_state,
             player_y=player.y,
@@ -1461,6 +1539,12 @@ def install_game_controller(
             mouse_velocity,
         )
 
+        if not run_state.is_paused:
+            music_state["track"] = advance_music_playlist(
+                current_track=music_state["track"],
+                playlist=music_playlist,
+            )
+
         dt = get_frame_dt()
         if dt <= 0.0:
             update_camera_tracking(
@@ -1474,6 +1558,8 @@ def install_game_controller(
             return
 
         if run_state.is_paused:
+            if music_state["track"] is not None and music_state["track"].playing:
+                music_state["track"].pause()
             motion_state.yaw_turn_speed = compute_smoothed_lateral_speed(
                 current_speed=motion_state.yaw_turn_speed,
                 axis_input=0.0,
@@ -1541,6 +1627,8 @@ def install_game_controller(
             fall_settings=settings.fall,
             gameplay_settings=settings.gameplay,
         )
+        if music_state["track"] is None and music_playlist:
+            music_state["track"] = start_music_track(music_playlist.pop(0))
         animate_spawned_objects(run_state, dt, player.y, player.position)
         process_collisions(
             player=player,
@@ -1604,6 +1692,11 @@ def install_game_controller(
         if key in PAUSE_KEYS:
             run_state.is_paused = not run_state.is_paused
             pause_text.enabled = run_state.is_paused
+            if music_state["track"] is not None:
+                if run_state.is_paused:
+                    music_state["track"].pause()
+                else:
+                    music_state["track"].play()
             return
 
         if key in RESTART_KEYS:
@@ -1639,6 +1732,14 @@ def run_game(settings: GameSettings | None = None) -> None:
         Ursina(
             title=active_settings.window_title,
             development_mode=active_settings.development_mode,
+            size=(
+                Vec2(
+                    active_settings.window_size[0],
+                    active_settings.window_size[1],
+                )
+                if active_settings.window_size is not None
+                else None
+            ),
         ),
     )
     application.asset_folder = Path(__file__).resolve().parents[2]

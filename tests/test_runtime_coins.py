@@ -27,6 +27,7 @@ class DummyEntity:
     """Minimal entity-like object used for coin collision/animation tests."""
 
     position: Vec3
+    y: float = 0.0
     scale: Vec3 = field(default_factory=lambda: Vec3(1.0, 1.0, 1.0))
     children: list[object] = field(default_factory=list)
 
