@@ -26,6 +26,7 @@ lint = [
   "flake8>=7.3.0",
   "isort>=8.0.0",
   "pylint>=4.0.5",
+  "pyupgrade>=3.21.2",
   "refurb>=2.0.0",
   "semgrep>=1.90.0",
   "ty>=0.0.18",
