@@ -32,7 +32,8 @@ class MotionState:
 
 
 @dataclass(slots=True)
-class SpawnedObject:
+class SpawnedObject:  # pylint: disable=too-many-instance-attributes
+    # R0902: state bundle.
     """Runtime state for one spawned world object."""
 
     entity: Entity
@@ -65,7 +66,8 @@ class SpawnedObject:
 
 
 @dataclass(slots=True)
-class FallingRunState:
+class FallingRunState:  # pylint: disable=too-many-instance-attributes
+    # R0902: state bundle.
     """Mutable run-state values tracked across gameplay frames."""
 
     score: int = 0
@@ -77,6 +79,8 @@ class FallingRunState:
     next_band_y: float = 0.0
     last_hit_time: float = 0.0
     spawned_objects: list[SpawnedObject] = field(default_factory=list)
+    coin_pattern_index: int = 0
+    coin_pattern_started_at: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)

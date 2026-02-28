@@ -1,13 +1,16 @@
 """Ursina runtime for an endless third-person falling game."""
 
+# pylint: disable=too-many-lines
+# C0302: large runtime keeps loop cohesive.
+
 import importlib
 from contextlib import suppress
 from functools import lru_cache
-from math import cos, sin, tau
+from math import sin
 from pathlib import Path
 from random import Random
 from time import monotonic
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import Any, Protocol, cast
 
 import ursina
 import ursina.color as color_module
@@ -17,7 +20,6 @@ from ursina import (
     Audio,
     DirectionalLight,
     Entity,
-    Shader,
     Text,
     Vec2,
     Vec3,
@@ -25,7 +27,6 @@ from ursina import (
     camera,
     destroy,
     lerp_exponential_decay,
-    load_texture,
     mouse,
     scene,
     window,
@@ -39,6 +40,18 @@ from .config import (
     GameSettings,
     MovementSettings,
 )
+from .runtime_audio import (
+    BOOST_LOOP_FADE_SECONDS,
+    BOOST_LOOP_VOLUME,
+    advance_music_playlist,
+    build_music_playlist,
+    play_coin_pickup_sfx,
+    play_obstacle_hit_sfx,
+    resolve_boost_loop_clip,
+    start_music_track,
+)
+from .runtime_backdrop import create_space_backdrop, update_atmosphere_for_depth
+from .runtime_colors import resolve_color, rgba_color
 from .runtime_controls import (
     clamp_to_play_area,
     compute_control_axes,
@@ -75,28 +88,9 @@ from .scene import (
     build_fall_band_blueprints,
 )
 
-if TYPE_CHECKING:
-    from ursina.color import Color
-
-
 LIT_SHADER = cast("object", ursina_shaders.lit_with_shadows_shader)
 PLAYER_COLLISION_RADIUS = 0.95
 RUN_RANDOM_SEED = 20260224
-PLANET_APPROACH_DEPTH = 1600.0
-STARFIELD_COUNT = 36
-STARFIELD_RADIUS = 74.0
-NEBULA_COUNT = 4
-MOTION_MOTE_COUNT = 24
-MOTION_MOTE_VERTICAL_SPAN = 72.0
-ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets"
-SPACE_SKY_DIR = ASSETS_DIR / "sky" / "NightSkyHDRI009_4K"
-SPACE_SKY_TEXTURE_CANDIDATES = (
-    "NightSkyHDRI009_4K_TONEMAPPED.jpg",
-    "NightSkyHDRI009.png",
-    "NightSkyHDRI009_4K_HDR.exr",
-)
-SKY_BLEND_HOLD_SECONDS = 24.0
-SKY_BLEND_DURATION_SECONDS = 6.0
 ASTEROID_MODEL_NAME = "models/asteroids/Asteroid_1.obj"
 ASTEROID_MODEL_VARIANTS: tuple[str, ...] = (
     "models/asteroids/Asteroid_1.obj",
@@ -128,11 +122,7 @@ ASTEROID_DIFFUSE_TEXTURE_BY_MODEL: dict[str, str] = {
 }
 ASTEROID_SCALE_MIN = 0.6
 ASTEROID_SCALE_MAX = 2.5
-COIN_SFX_NAMES = ("audio/sfx/345297_6212127-lq.mp3",)
-IMPACT_SFX_NAMES = ("audio/sfx/explosionCrunch_000.ogg",)
-BOOST_LOOP_SFX_NAMES = ("audio/sfx/freesound_community-loopingthrust-95548.mp3",)
-BOOST_LOOP_VOLUME = 0.7
-BOOST_LOOP_FADE_SECONDS = 0.4
+COIN_PATTERN_SWITCH_SECONDS = 40.0
 SCROLL_DIRECTION_BY_KEY = {
     "scroll up": 1,
     "scroll down": -1,
@@ -149,6 +139,8 @@ ANIMATION_CULL_DISTANCE = 170.0
 OBSTACLE_ANIMATION_CULL_DISTANCE = ANIMATION_CULL_DISTANCE * 3.0
 COIN_ANIMATION_CULL_DISTANCE = ANIMATION_CULL_DISTANCE * 2.0
 COIN_COLLECT_ANIMATION_SECONDS = 0.18
+MIN_ENTITY_SCALE = 0.02
+BOOST_DIVE_THRESHOLD = 0.05
 
 CAMERA_POST_PROCESS_OPTIONS: tuple[tuple[str, object | None], ...] = (
     ("Off", None),
@@ -159,49 +151,13 @@ CAMERA_POST_PROCESS_OPTIONS: tuple[tuple[str, object | None], ...] = (
     ),
 )
 
-SKY_BLEND_SHADER = Shader(
-    name="sky_blend_shader",
-    language=Shader.GLSL,
-    fragment="""
-#version 430
 
-in vec2 uv;
-out vec4 color;
-
-uniform sampler2D p3d_Texture0;
-uniform sampler2D secondary_texture;
-uniform float blend_factor;
-
-void main() {
-    vec4 primary = texture(p3d_Texture0, uv);
-    vec4 secondary = texture(secondary_texture, uv);
-    color = vec4(mix(primary.rgb, secondary.rgb, blend_factor), 1.0);
-}
-""",
-    default_input={
-        "blend_factor": 0.0,
-    },
-)
-
-
-class GamepadVibrateCallable(Protocol):
+class GamepadVibrateCallable(Protocol):  # pylint: disable=too-few-public-methods
+    # R0903: protocol is single-call hook.
     """Callable protocol for Ursina's optional gamepad vibrate hook."""
 
     def __call__(self, **_kwargs: float) -> object:
         """Trigger gamepad vibration with motor intensities and duration."""
-
-
-@lru_cache(maxsize=32)
-def resolve_color(color_name: str) -> Color:
-    """Resolve a color name from Ursina's built-in color palette."""
-    return cast("Color", getattr(color_module, color_name, color_module.white))
-
-
-def rgba_color(red: float, green: float, blue: float, alpha: float = 1.0) -> Color:
-    """Create a color using Ursina's runtime rgba helper."""
-    # B009: getattr-with-constant; Ursina exposes color helpers dynamically.
-    rgba_factory = getattr(color_module, "rgba")  # noqa: B009
-    return cast("Color", rgba_factory(red, green, blue, alpha))
 
 
 def mark_lit_shadowed(entity: Entity) -> Entity:
@@ -213,21 +169,13 @@ def mark_lit_shadowed(entity: Entity) -> Entity:
 def get_frame_dt() -> float:
     """Read frame delta from Ursina's dynamic runtime module."""
     # Ursina exposes frame delta via dynamic module attributes.
-    # B009: getattr-with-constant; ursina.time.dt is dynamic at runtime.
-    return cast("float", getattr(getattr(ursina, "time"), "dt", 0.0))  # noqa: B009
-
-
-def lerp_rgb_color(
-    start_rgb: tuple[int, int, int],
-    end_rgb: tuple[int, int, int],
-    factor: float,
-) -> Color:
-    """Interpolate between two rgb tuples and return a color value."""
-    clamped_factor = max(0.0, min(1.0, factor))
-    red = round(lerp_scalar(float(start_rgb[0]), float(end_rgb[0]), clamped_factor))
-    green = round(lerp_scalar(float(start_rgb[1]), float(end_rgb[1]), clamped_factor))
-    blue = round(lerp_scalar(float(start_rgb[2]), float(end_rgb[2]), clamped_factor))
-    return rgba_color(red / 255.0, green / 255.0, blue / 255.0, 1.0)
+    # B009: getattr-with-constant; Ursina sets dt.
+    frame_dt = getattr(
+        ursina.time,
+        "dt",
+        0.0,
+    )
+    return cast("float", frame_dt)
 
 
 @lru_cache(maxsize=2048)
@@ -297,7 +245,8 @@ def configure_window(settings: GameSettings) -> None:
     window.collider_counter.enabled = False
 
 
-def add_avatar_part(
+# PLR0913: too-many-arguments; explicit parts.
+def add_avatar_part(  # noqa: PLR0913
     *,
     parent: Entity,
     name: str,
@@ -307,6 +256,8 @@ def add_avatar_part(
     position: Vec3,
 ) -> Entity:
     """Create one named avatar part for scene-inspector readability."""
+    # PLR0913: explicit parts for scene readability.
+    # pylint: disable=too-many-arguments  # R0913: explicit parts.
     part = Entity(
         parent=parent,
         name=name,
@@ -468,7 +419,9 @@ def apply_camera_post_process(shader: object | None) -> None:
                 filter_quad.removeNode()
         camera.filter_manager = None
         camera.filter_quad = None
-        camera._shader = None
+        # SLF001: private access; Ursina uses _shader for filters.
+        # pylint: disable=protected-access  # W0212: Ursina internal shader.
+        camera._shader = None  # noqa: SLF001
         return
 
     camera.shader = shader
@@ -505,236 +458,16 @@ def configure_lighting(focus_entity: Entity) -> LightingRig:
     return LightingRig(key_light=key_light, ambient_light=ambient_light)
 
 
-def create_space_backdrop() -> BackdropState:
-    """Create HDRI sky plus layered ambience for deep-space descent."""
-    sky_module = importlib.import_module("ursina.prefabs.sky")
-    sky_factory = cast("type[Entity]", sky_module.Sky)
-    sky_entity = sky_factory()
-    initialize_sky_texture_blend_state(sky_entity)
-
-    motion_motes = [
-        Entity(
-            name=f"atmo_mote_{mote_index}",
-            model="cube",
-            position=Vec3(0.0, 0.0, 0.0),
-            scale=Vec3(0.06, 2.0, 0.06),
-            color=rgba_color(0.74, 0.92, 1.0, 0.2),
-            unlit=True,
-        )
-        for mote_index in range(MOTION_MOTE_COUNT)
-    ]
-
-    return BackdropState(
-        sky=sky_entity,
-        motion_motes=tuple(motion_motes),
-    )
-
-
-def resolve_space_sky_texture_path() -> Path | None:
-    """Resolve a custom sky texture path from the NightSkyHDRI asset folder."""
-    for file_name in SPACE_SKY_TEXTURE_CANDIDATES:
-        candidate = SPACE_SKY_DIR / file_name
-        if candidate.exists():
-            return candidate
-    return None
-
-
-@lru_cache(maxsize=8)
-def resolve_music_paths() -> tuple[Path, ...]:
-    """Resolve all available background music tracks."""
-    music_dir = ASSETS_DIR / "audio" / "music"
-    if not music_dir.exists():
-        return ()
-    return tuple(sorted(path for path in music_dir.glob("*.mp3") if path.is_file()))
-
-
-def build_music_playlist() -> list[Path]:
-    """Build a shuffled playlist of all available music tracks."""
-    playlist = list(resolve_music_paths())
-    Random().shuffle(playlist)  # noqa: S311  # nosec B311 - non-crypto shuffle.
-    return playlist
-
-
-def start_music_track(track_path: Path) -> Audio:
-    """Start a single background music track (non-looping)."""
-    relative_track = track_path.relative_to(ASSETS_DIR.parent).as_posix()
-    audio_factory: Any = Audio
-    return audio_factory(
-        relative_track,
-        loop=False,
-        autoplay=True,
-        auto_destroy=True,
-        volume=0.6,
-    )
-
-
-def advance_music_playlist(
-    *,
-    current_track: Audio | None,
-    playlist: list[Path],
-) -> Audio | None:
-    """Advance to the next track when the current one finishes."""
-    if current_track is not None and current_track.playing:
-        return current_track
-
-    if not playlist:
-        playlist.extend(build_music_playlist())
-        if not playlist:
-            return None
-
-    return start_music_track(playlist.pop(0))
-
-
-def resolve_space_sky_texture_paths() -> tuple[Path, ...]:
-    """Resolve all available sky textures for timed cross-fade cycling."""
-    resolved: list[Path] = []
-
-    for extension in ("*.png", "*.jpg", "*.jpeg", "*.exr"):
-        resolved.extend(
-            sorted(
-                path for path in (ASSETS_DIR / "sky").glob(extension) if path.is_file()
-            ),
-        )
-
-    fallback_texture = resolve_space_sky_texture_path()
-    if fallback_texture is not None and fallback_texture not in resolved:
-        resolved.append(fallback_texture)
-
-    seen: set[Path] = set()
-    deduped: list[Path] = []
-    for texture_path in resolved:
-        if texture_path in seen:
-            continue
-        seen.add(texture_path)
-        deduped.append(texture_path)
-    return tuple(deduped)
-
-
-def initialize_sky_texture_blend_state(sky_entity: Entity) -> None:
-    """Prepare shader inputs and runtime state for sky texture cross-fading."""
-    texture_paths = resolve_space_sky_texture_paths()
-    if not texture_paths:
-        return
-
-    texture_assets = [path.relative_to(ASSETS_DIR).as_posix() for path in texture_paths]
-    preloaded_textures = tuple(
-        load_texture(texture_asset) for texture_asset in texture_assets
-    )
-    sky_entity._sky_blend_assets = tuple(texture_assets)  # noqa: SLF001
-    sky_entity._sky_blend_textures = preloaded_textures  # noqa: SLF001
-    sky_entity._sky_blend_current = 0  # noqa: SLF001
-    sky_entity._sky_blend_next = 1 if len(texture_assets) > 1 else 0  # noqa: SLF001
-    sky_entity._sky_blend_cycle_start = monotonic()  # noqa: SLF001
-
-    sky_entity.texture = texture_assets[0]
-    if len(texture_assets) > 1:
-        sky_entity.shader = SKY_BLEND_SHADER
-        sky_entity.set_shader_input("secondary_texture", preloaded_textures[1])
-        sky_entity.set_shader_input("blend_factor", 0.0)
-
-
-def update_sky_texture_blend(sky_entity: Entity, runtime_time: float) -> None:
-    """Advance timed sky blending so textures smoothly cycle for inspection."""
-    texture_assets = cast(
-        "tuple[str, ...]",
-        getattr(sky_entity, "_sky_blend_assets", ()),
-    )
-    preloaded_textures = cast(
-        "tuple[object, ...]",
-        getattr(sky_entity, "_sky_blend_textures", ()),
-    )
-    if len(texture_assets) < 2:
-        return
-
-    cycle_start = cast(
-        "float",
-        getattr(sky_entity, "_sky_blend_cycle_start", runtime_time),
-    )
-    current_index = cast("int", getattr(sky_entity, "_sky_blend_current", 0))
-    next_index = cast("int", getattr(sky_entity, "_sky_blend_next", 1))
-    full_cycle = SKY_BLEND_HOLD_SECONDS + SKY_BLEND_DURATION_SECONDS
-    cycle_elapsed = runtime_time - cycle_start
-
-    while cycle_elapsed >= full_cycle:
-        current_index = next_index
-        next_index = (next_index + 1) % len(texture_assets)
-        sky_entity.texture = texture_assets[current_index]
-        sky_entity.set_shader_input("secondary_texture", preloaded_textures[next_index])
-        cycle_start += full_cycle
-        cycle_elapsed = runtime_time - cycle_start
-
-    if cycle_elapsed <= SKY_BLEND_HOLD_SECONDS:
-        blend_factor = 0.0
-    else:
-        blend_factor = min(
-            1.0,
-            (cycle_elapsed - SKY_BLEND_HOLD_SECONDS) / SKY_BLEND_DURATION_SECONDS,
-        )
-
-    sky_entity._sky_blend_cycle_start = cycle_start  # noqa: SLF001
-    sky_entity._sky_blend_current = current_index  # noqa: SLF001
-    sky_entity._sky_blend_next = next_index  # noqa: SLF001
-    sky_entity.set_shader_input("blend_factor", blend_factor)
-
-
-def update_atmosphere_for_depth(
-    *,
-    player: Entity,
-    lighting_rig: LightingRig,
-    backdrop_state: BackdropState,
-    fall_speed: float,
-) -> None:
-    """Shift sky, stars, and atmosphere effects while descending."""
-    depth = max(0.0, -player.y)
-    progress = max(0.0, min(1.0, depth / PLANET_APPROACH_DEPTH))
-    runtime_time = monotonic()
-    update_sky_texture_blend(backdrop_state.sky, runtime_time)
-
-    backdrop_state.sky.color = lerp_rgb_color((7, 10, 24), (145, 186, 214), progress)
-    lighting_rig.ambient_light.color = color_module.rgba(
-        0.28,
-        0.28,
-        0.28,
-        1.0,
-    )
-    lighting_rig.key_light.color = color_module.rgba(
-        0.98,
-        0.98,
-        0.98,
-        1.0,
-    )
-
-    speed_factor = max(0.0, min(1.0, (fall_speed - 12.0) / 34.0))
-    mote_thickness = lerp_scalar(0.05, 0.09, speed_factor)
-    mote_length = lerp_scalar(1.8, 3.6, speed_factor)
-    for mote_index, mote in enumerate(backdrop_state.motion_motes):
-        angle = ((mote_index / MOTION_MOTE_COUNT) * tau) + (runtime_time * 0.18)
-        radius = 7.4 + ((mote_index % 7) * 0.82)
-        travel = (
-            (runtime_time * max(10.0, fall_speed * 0.95)) + (mote_index * 3.7)
-        ) % MOTION_MOTE_VERTICAL_SPAN
-        mote.position = Vec3(
-            player.x + (cos(angle) * radius),
-            player.y - 34.0 + travel,
-            player.z + (sin(angle) * radius),
-        )
-        mote.rotation_y = (angle * 57.2958) + 90.0
-        mote.scale = Vec3(mote_thickness, mote_length, mote_thickness)
-        mote.color = rgba_color(
-            lerp_scalar(0.58, 0.92, progress),
-            lerp_scalar(0.75, 0.94, progress),
-            1.0,
-            lerp_scalar(0.08, 0.32, speed_factor),
-        )
-
-
-def spawn_entity_from_blueprint(
+# C901: too-complex; PLR0915: too-many-statements.
+def spawn_entity_from_blueprint(  # noqa: C901, PLR0915
+    # pylint: disable=too-many-locals,too-many-statements
     *,
     blueprint: FallingBlueprint,
     band_index: int,
     blueprint_index: int,
     gameplay_settings: GameplayTuningSettings,
 ) -> SpawnedObject:
+    # R0914/R0915: setup is data-heavy.
     """Spawn one band blueprint as an Ursina entity and runtime record."""
     variation_seed = (band_index * 41) + (blueprint_index * 17)
     spawn_model = blueprint.model
@@ -936,69 +669,6 @@ def resolve_gamepad_vibrate_callable() -> GamepadVibrateCallable | None:
     return None
 
 
-def play_sfx_clip(*, clip_name: str, volume: float, pitch: float) -> None:
-    """Play one-shot sound effect with runtime-set volume and pitch."""
-    audio_factory: Any = Audio
-    audio_factory(clip_name, volume=volume, pitch=pitch, auto_destroy=True)
-
-
-def play_coin_pickup_sfx() -> None:
-    """Play the configured coin pickup sound effect."""
-    with suppress(Exception):
-        coin_path = resolve_sfx_path(
-            preferred_names=COIN_SFX_NAMES,
-            fallback_pattern="coin*.ogg",
-        )
-        if coin_path is not None:
-            play_sfx_clip(clip_name=coin_path.name, volume=0.7, pitch=1.0)
-            return
-        play_sfx_clip(clip_name="sine", volume=1.0, pitch=2.0)
-
-
-def play_obstacle_hit_sfx() -> None:
-    """Play the configured obstacle impact sound effect."""
-    with suppress(Exception):
-        impact_path = resolve_sfx_path(
-            preferred_names=IMPACT_SFX_NAMES,
-            fallback_pattern="*impact*.ogg",
-        )
-        if impact_path is not None:
-            play_sfx_clip(clip_name=impact_path.name, volume=0.75, pitch=1.0)
-            return
-        play_sfx_clip(clip_name="sine", volume=1.0, pitch=1.0)
-
-
-def resolve_boost_loop_clip() -> str | None:
-    """Resolve the looping boost audio clip name."""
-    with suppress(Exception):
-        boost_path = resolve_sfx_path(
-            preferred_names=BOOST_LOOP_SFX_NAMES,
-            fallback_pattern="*thrust*.*",
-        )
-        if boost_path is not None:
-            return boost_path.name
-    return None
-
-
-@lru_cache(maxsize=8)
-def resolve_sfx_path(
-    *,
-    preferred_names: tuple[str, ...],
-    fallback_pattern: str,
-) -> Path | None:
-    """Resolve an audio file path from preferred names or a fallback glob."""
-    for file_name in preferred_names:
-        candidate = ASSETS_DIR / file_name
-        if candidate.exists():
-            return candidate
-
-    fallback_matches = sorted(ASSETS_DIR.glob(fallback_pattern))
-    if fallback_matches:
-        return fallback_matches[0]
-
-    return None
-
-
 def initialize_run_state(
     run_state: FallingRunState,
     fall_settings: FallSettings,
@@ -1012,6 +682,17 @@ def initialize_run_state(
     run_state.next_band_index = 0
     run_state.next_band_y = fall_settings.initial_spawn_y
     run_state.last_hit_time = 0.0
+    run_state.coin_pattern_index = 0
+    run_state.coin_pattern_started_at = monotonic()
+
+
+def update_coin_pattern_timer(run_state: FallingRunState) -> None:
+    """Advance the active coin pattern on a fixed interval."""
+    now = monotonic()
+    if now - run_state.coin_pattern_started_at < COIN_PATTERN_SWITCH_SECONDS:
+        return
+    run_state.coin_pattern_started_at = now
+    run_state.coin_pattern_index += 1
 
 
 def destroy_entity_tree(entity: Entity) -> None:
@@ -1046,6 +727,7 @@ def spawn_bands_ahead(
             band_index=run_state.next_band_index,
             y_position=run_state.next_band_y,
             rng=rng,
+            coin_pattern_index=run_state.coin_pattern_index,
         )
         for blueprint_index, blueprint in enumerate(blueprints):
             run_state.spawned_objects.append(
@@ -1170,12 +852,15 @@ def process_collisions(
     run_state.spawned_objects = survivors
 
 
-def animate_spawned_objects(
+# C901: too-complex; PLR0912: too-many-branches; PLR0915: too-many-statements.
+def animate_spawned_objects(  # noqa: C901, PLR0912, PLR0915
+    # pylint: disable=too-many-branches,too-many-locals,too-many-statements
     run_state: FallingRunState,
     dt: float,
     player_y: float,
     player_position: Vec3,
 ) -> None:
+    # R0912/R0914/R0915: frame loop.
     """Animate collectibles and obstacles for richer motion language."""
     runtime_time = monotonic()
     survivors: list[SpawnedObject] = []
@@ -1206,9 +891,9 @@ def animate_spawned_objects(
             )
             collect_scale = max(0.0, 1.0 - collect_progress)
             spawned.entity.scale = Vec3(
-                spawned.base_scale.x * collect_scale,
-                spawned.base_scale.y * collect_scale,
-                spawned.base_scale.z * collect_scale,
+                max(MIN_ENTITY_SCALE, spawned.base_scale.x * collect_scale),
+                max(MIN_ENTITY_SCALE, spawned.base_scale.y * collect_scale),
+                max(MIN_ENTITY_SCALE, spawned.base_scale.z * collect_scale),
             )
 
             survivors.append(spawned)
@@ -1272,9 +957,9 @@ def animate_spawned_objects(
                     * spawned.pulse_amplitude
                 )
                 spawned.entity.scale = Vec3(
-                    spawned.base_scale.x * pulse_scale,
-                    spawned.base_scale.y * pulse_scale,
-                    spawned.base_scale.z * pulse_scale,
+                    max(MIN_ENTITY_SCALE, spawned.base_scale.x * pulse_scale),
+                    max(MIN_ENTITY_SCALE, spawned.base_scale.y * pulse_scale),
+                    max(MIN_ENTITY_SCALE, spawned.base_scale.z * pulse_scale),
                 )
             survivors.append(spawned)
             continue
@@ -1328,7 +1013,9 @@ def update_camera_tracking(
     camera.rotation_z = 0.0
 
 
-def apply_player_movement(
+# PLR0913: too-many-arguments; explicit inputs.
+def apply_player_movement(  # noqa: PLR0913
+    # pylint: disable=too-many-arguments,too-many-locals
     *,
     player: Entity,
     motion_state: MotionState,
@@ -1340,6 +1027,7 @@ def apply_player_movement(
     dive_axis: float,
     dt: float,
 ) -> float:
+    # R0913/R0914: explicit motion inputs.
     """Move the player avatar and return effective vertical fall speed."""
     fall_speed: float = compute_fall_speed(
         base_speed=fall_settings.base_speed,
@@ -1403,7 +1091,9 @@ def apply_player_movement(
     return fall_speed
 
 
-def install_game_controller(
+# C901: too-complex; PLR0913: too-many-arguments; PLR0915: too-many-statements.
+def install_game_controller(  # noqa: C901, PLR0913, PLR0915
+    # pylint: disable=too-many-arguments,too-many-locals,too-many-statements
     *,
     player: Entity,
     orbit_rig: OrbitRig,
@@ -1415,10 +1105,12 @@ def install_game_controller(
     status_text: Text,
     pause_text: Text,
 ) -> Entity:
+    # R0913/R0914/R0915: controller glue.
     """Attach per-frame gameplay update and input handlers."""
     music_state: dict[str, Audio | None] = {"track": None}
     boost_state: dict[str, Audio | None] = {"track": None}
     controller = Entity(name="fall_game_controller")
+    # S311: non-crypto RNG; B311: gameplay seed.
     randomizer = Random(RUN_RANDOM_SEED)  # noqa: S311  # nosec B311
     camera_state = CameraState(
         yaw_angle=0.0,
@@ -1473,7 +1165,8 @@ def install_game_controller(
 
     reset_run()
 
-    def controller_update() -> None:
+    # C901: too-complex; per-frame flow.
+    def controller_update() -> None:  # noqa: C901  # C901: complex; per-frame flow.
         held = cast("dict[str, float]", getattr(ursina, "held_keys", {}))
         mouse_velocity = cast("Vec3", getattr(mouse, "velocity", Vec3(0.0, 0.0, 0.0)))
         x_axis, z_axis, dive_axis, yaw_turn_axis, look_velocity = compute_control_axes(
@@ -1564,7 +1257,9 @@ def install_game_controller(
         )
         run_state.deepest_y = min(run_state.deepest_y, player.y)
 
-        if boost_clip_name is not None and dive_axis > 0.05:
+        update_coin_pattern_timer(run_state)
+
+        if boost_clip_name is not None and dive_axis > BOOST_DIVE_THRESHOLD:
             if boost_state["track"] is None or not boost_state["track"].playing:
                 audio_factory: Any = Audio
                 boost_state["track"] = audio_factory(
@@ -1574,15 +1269,17 @@ def install_game_controller(
                     volume=BOOST_LOOP_VOLUME,
                 )
             else:
-                boost_state["track"].volume = BOOST_LOOP_VOLUME
+                boost_track = cast("Any", boost_state["track"])
+                boost_track.volume = BOOST_LOOP_VOLUME
         elif boost_state["track"] is not None and boost_state["track"].playing:
             fade_speed = BOOST_LOOP_VOLUME / max(0.01, BOOST_LOOP_FADE_SECONDS)
-            boost_state["track"].volume = max(
+            boost_track = cast("Any", boost_state["track"])
+            boost_track.volume = max(
                 0.0,
-                boost_state["track"].volume - (fade_speed * dt),
+                boost_track.volume - (fade_speed * dt),
             )
-            if boost_state["track"].volume <= 0.0:
-                boost_state["track"].pause()
+            if boost_track.volume <= 0.0:
+                boost_track.pause()
 
         spawn_bands_ahead(
             run_state=run_state,
@@ -1627,7 +1324,9 @@ def install_game_controller(
         )
         update_status_text(run_state, status_text)
 
-    def controller_input(key: str) -> None:
+    # C901: too-complex; input branching.
+    def controller_input(key: str) -> None:  # noqa: C901
+        # C901: complex; input branching.
         nonlocal post_process_index
 
         if key == "escape":
@@ -1733,5 +1432,5 @@ def run_game(settings: GameSettings | None = None) -> None:
     )
 
     # Ursina's app proxy is typed as object here, so dynamic access is needed.
-    run_callable = getattr(app, "run")  # noqa: B009  # B009: getattr-with-constant
-    run_callable()
+    app_proxy = cast("Any", app)
+    app_proxy.run()

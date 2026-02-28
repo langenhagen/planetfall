@@ -23,6 +23,7 @@ COIN_SCORE_VALUE = 10  # Standard coin value.
 HIGH_VALUE_COIN_SCORE_VALUE = 25  # Bonus coin value (halo-highlighted).
 MAX_COLLIDABLE_ABS = 6.0 * TUNNEL_WIDTH_SCALE  # Clamp for obstacle/coin placement.
 MAX_COIN_ABS = 5.0 * TUNNEL_WIDTH_SCALE  # Keep coin lanes slightly tighter.
+OBSTACLE_DENSITY_MULTIPLIER = 0.9  # Reduce asteroid count by ~10%.
 PATTERN_CHICANE = 2  # Pattern index for alternating dual-row gates.
 PATTERN_RING_GAP = 3  # Pattern index for ring obstacle with one open sector.
 # Small-length guard to avoid divide-by-zero normalization.
@@ -45,7 +46,8 @@ class Vec3:
 
 
 @dataclass(frozen=True, slots=True)
-class FallingBlueprint:
+class FallingBlueprint:  # pylint: disable=too-many-instance-attributes
+    # R0902: blueprint bundles related fields.
     """Data-only description for spawning one falling-course entity."""
 
     name: str
@@ -63,12 +65,22 @@ def build_fall_band_blueprints(
     band_index: int,
     y_position: float,
     rng: Random,
+    coin_pattern_index: int = 0,
 ) -> tuple[FallingBlueprint, ...]:
     """Build one designed band with chained coins and structured obstacles."""
     blueprints: list[FallingBlueprint] = []
-    blueprints.extend(
-        _coin_chain_blueprints(y_position=y_position, band_index=band_index),
-    )
+    if coin_pattern_index % 3 == 0:
+        blueprints.extend(
+            _coin_chain_blueprints(y_position=y_position, band_index=band_index),
+        )
+    elif coin_pattern_index % 3 == 1:
+        blueprints.extend(
+            _coin_wave_blueprints(y_position=y_position, band_index=band_index),
+        )
+    else:
+        blueprints.extend(
+            _coin_fan_blueprints(y_position=y_position, band_index=band_index),
+        )
 
     pattern = band_index % 5
     if pattern == 0:
@@ -106,7 +118,7 @@ def build_fall_band_blueprints(
             _extra_asteroid_blueprints(y_position=y_position, band_index=band_index),
         )
 
-    return tuple(blueprints)
+    return tuple(_apply_obstacle_density(blueprints, rng))
 
 
 @lru_cache(maxsize=1024)
@@ -145,7 +157,8 @@ def _angular_distance(angle_a: float, angle_b: float) -> float:
     return min(delta, tau - delta)
 
 
-def _obstacle_blueprint(
+def _obstacle_blueprint(  # noqa: PLR0913
+    # pylint: disable=too-many-arguments
     *,
     name: str,
     x_pos: float,
@@ -154,6 +167,7 @@ def _obstacle_blueprint(
     scale: Vec3,
     color_name: str = "orange",
 ) -> FallingBlueprint:
+    # R0913: explicit placement inputs.
     return FallingBlueprint(
         name=name,
         entity_kind="obstacle",
@@ -165,11 +179,36 @@ def _obstacle_blueprint(
             y_pos,
             _clamp_collidable_axis(z_pos),
         ),
-        collision_radius=max(scale.x, scale.y, scale.z) * 0.45,
+        collision_radius=max(scale.x, scale.y, scale.z) * 0.55,
     )
 
 
-def _coin_blueprint(
+def _apply_obstacle_density(
+    blueprints: list[FallingBlueprint],
+    rng: Random,
+) -> list[FallingBlueprint]:
+    obstacles = [
+        blueprint for blueprint in blueprints if blueprint.entity_kind == "obstacle"
+    ]
+    if not obstacles:
+        return blueprints
+
+    reduced: list[FallingBlueprint] = []
+    for blueprint in blueprints:
+        if blueprint.entity_kind != "obstacle":
+            reduced.append(blueprint)
+            continue
+        if rng.random() < OBSTACLE_DENSITY_MULTIPLIER:
+            reduced.append(blueprint)
+
+    if not any(blueprint.entity_kind == "obstacle" for blueprint in reduced):
+        reduced.append(obstacles[0])
+
+    return reduced
+
+
+def _coin_blueprint(  # noqa: PLR0913
+    # pylint: disable=too-many-arguments
     *,
     name: str,
     x_pos: float,
@@ -178,6 +217,7 @@ def _coin_blueprint(
     score_value: int = COIN_SCORE_VALUE,
     color_name: str = "yellow",
 ) -> FallingBlueprint:
+    # R0913: explicit placement inputs.
     return FallingBlueprint(
         name=name,
         entity_kind="coin",
@@ -252,6 +292,56 @@ def _coin_chain_blueprints(
                 x_pos=center.x + (side.x * COIN_CHAIN_SIDE_OFFSET),
                 y_pos=y_position + 0.65,
                 z_pos=center.z + (side.z * COIN_CHAIN_SIDE_OFFSET),
+            ),
+        )
+
+    return tuple(blueprints)
+
+
+def _coin_wave_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[FallingBlueprint, ...]:
+    center = _path_center(band_index)
+    direction = _path_direction(band_index)
+    side = Vec3(-direction.z, 0.0, direction.x)
+    offsets = (-COIN_CHAIN_FORWARD_OFFSET, 0.0, COIN_CHAIN_FORWARD_OFFSET)
+    blueprints: list[FallingBlueprint] = []
+
+    for index, forward_offset in enumerate(offsets):
+        lateral = (index - 1) * (COIN_CHAIN_SIDE_OFFSET * 0.75)
+        blueprints.append(
+            _coin_blueprint(
+                name=f"coin_wave_{index}",
+                x_pos=center.x + (direction.x * forward_offset) + (side.x * lateral),
+                y_pos=y_position + 0.45,
+                z_pos=center.z + (direction.z * forward_offset) + (side.z * lateral),
+            ),
+        )
+
+    return tuple(blueprints)
+
+
+def _coin_fan_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[FallingBlueprint, ...]:
+    center = _path_center(band_index)
+    direction = _path_direction(band_index)
+    side = Vec3(-direction.z, 0.0, direction.x)
+    blueprints: list[FallingBlueprint] = []
+
+    for index in range(5):
+        spread = (index - 2) * (COIN_CHAIN_SIDE_OFFSET * 0.75)
+        forward = (index - 2) * (COIN_CHAIN_FORWARD_OFFSET * 0.35)
+        blueprints.append(
+            _coin_blueprint(
+                name=f"coin_fan_{index}",
+                x_pos=center.x + (side.x * spread) + (direction.x * forward),
+                y_pos=y_position + 0.55,
+                z_pos=center.z + (side.z * spread) + (direction.z * forward),
             ),
         )
 
