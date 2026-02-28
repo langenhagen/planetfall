@@ -13,34 +13,28 @@ from time import monotonic
 from typing import Any, Protocol, cast
 
 import ursina
-import ursina.color as color_module
 import ursina.shaders as ursina_shaders
 from ursina import (
-    AmbientLight,
     Audio,
-    DirectionalLight,
     Entity,
     Text,
     Vec2,
     Vec3,
     application,
-    camera,
     destroy,
     lerp_exponential_decay,
     mouse,
-    scene,
     window,
 )
 from ursina.main import Ursina
 
-from .config import (
-    CameraSettings,
+from planetfall.game.config import (
     FallSettings,
     GameplayTuningSettings,
     GameSettings,
     MovementSettings,
 )
-from .runtime_audio import (
+from planetfall.game.runtime_audio import (
     BOOST_LOOP_FADE_SECONDS,
     BOOST_LOOP_VOLUME,
     build_music_playlist,
@@ -49,9 +43,19 @@ from .runtime_audio import (
     resolve_boost_loop_clip,
     start_music_track,
 )
-from .runtime_backdrop import create_space_backdrop, update_atmosphere_for_depth
-from .runtime_colors import resolve_color, rgba_color
-from .runtime_controls import (
+from planetfall.game.runtime_backdrop import (
+    create_space_backdrop,
+    update_atmosphere_for_depth,
+)
+from planetfall.game.runtime_camera import (
+    apply_camera_post_process,
+    configure_camera,
+    configure_mouse_capture,
+    create_camera_orbit_rig,
+    update_camera_tracking,
+)
+from planetfall.game.runtime_colors import resolve_color, rgba_color
+from planetfall.game.runtime_controls import (
     clamp_to_play_area,
     compute_control_axes,
     compute_fall_speed,
@@ -63,8 +67,14 @@ from .runtime_controls import (
     should_despawn_object,
     should_spawn_next_band,
 )
-from .runtime_postfx import next_post_process_option, toggle_render_mode
-from .runtime_state import (
+from planetfall.game.runtime_entities import (
+    configure_lighting,
+    create_player_visual_state,
+    mark_lit_shadowed,
+    spawn_player_avatar,
+)
+from planetfall.game.runtime_postfx import next_post_process_option, toggle_render_mode
+from planetfall.game.runtime_state import (
     BackdropState,
     CameraState,
     FallingRunState,
@@ -74,13 +84,13 @@ from .runtime_state import (
     PlayerVisualState,
     SpawnedObject,
 )
-from .runtime_ui import (
+from planetfall.game.runtime_ui import (
     create_controls_hint,
     create_pause_text,
     create_status_text,
     update_status_text,
 )
-from .scene import (
+from planetfall.game.scene import (
     BAND_SPACING,
     COIN_PATTERN_COUNT,
     COIN_SCORE_VALUE,
@@ -88,7 +98,6 @@ from .scene import (
     build_fall_band_blueprints,
 )
 
-LIT_SHADER = cast("object", ursina_shaders.lit_with_shadows_shader)
 PLAYER_COLLISION_RADIUS = 0.95
 RUN_RANDOM_SEED = 20260224
 ASTEROID_MODEL_NAME = "models/asteroids/Asteroid_1.obj"
@@ -161,12 +170,6 @@ class GamepadVibrateCallable(Protocol):  # pylint: disable=too-few-public-method
 
     def __call__(self, **_kwargs: float) -> object:
         """Trigger gamepad vibration with motor intensities and duration."""
-
-
-def mark_lit_shadowed(entity: Entity) -> Entity:
-    """Apply the project-default lit shader without shadow casting."""
-    entity.shader = LIT_SHADER
-    return entity
 
 
 def get_frame_dt() -> float:
@@ -249,113 +252,6 @@ def configure_window(settings: GameSettings) -> None:
 
 
 # PLR0913: too-many-arguments; explicit parts.
-def add_avatar_part(  # noqa: PLR0913
-    *,
-    parent: Entity,
-    name: str,
-    model: str,
-    color_name: str,
-    scale: Vec3,
-    position: Vec3,
-) -> Entity:
-    """Create one named avatar part for scene-inspector readability."""
-    # PLR0913: explicit parts for scene readability.
-    # pylint: disable=too-many-arguments  # R0913: explicit parts.
-    part = Entity(
-        parent=parent,
-        name=name,
-        model=model,
-        color=resolve_color(color_name),
-        scale=scale,
-        position=position,
-    )
-    return mark_lit_shadowed(part)
-
-
-def spawn_player_avatar() -> Entity:
-    """Spawn a stylized falling character visible in third-person view."""
-    avatar = Entity(name="player_faller_root", position=Vec3(0.0, 0.0, 0.0))
-
-    add_avatar_part(
-        parent=avatar,
-        name="player_torso",
-        model="cube",
-        color_name="azure",
-        scale=Vec3(1.15, 1.55, 0.8),
-        position=Vec3(0.0, 0.0, 0.0),
-    )
-    add_avatar_part(
-        parent=avatar,
-        name="player_head",
-        model="sphere",
-        color_name="peach",
-        scale=Vec3(0.78, 0.78, 0.78),
-        position=Vec3(0.0, 1.12, 0.0),
-    )
-    add_avatar_part(
-        parent=avatar,
-        name="player_pack",
-        model="cube",
-        color_name="dark_gray",
-        scale=Vec3(0.88, 0.92, 0.32),
-        position=Vec3(0.0, 0.2, -0.56),
-    )
-
-    for side_name, side_x in (("left", -0.86), ("right", 0.86)):
-        add_avatar_part(
-            parent=avatar,
-            name=f"player_arm_{side_name}",
-            model="cube",
-            color_name="orange",
-            scale=Vec3(0.34, 1.18, 0.34),
-            position=Vec3(side_x, -0.06, 0.0),
-        )
-
-    for side_name, side_x in (("left", -0.34), ("right", 0.34)):
-        add_avatar_part(
-            parent=avatar,
-            name=f"player_leg_{side_name}",
-            model="cube",
-            color_name="navy",
-            scale=Vec3(0.38, 1.02, 0.38),
-            position=Vec3(side_x, -1.18, 0.0),
-        )
-
-    return avatar
-
-
-def create_player_visual_state(player: Entity) -> PlayerVisualState:
-    """Attach contrails and aura entities to enrich player visuals."""
-    aura = Entity(
-        parent=player,
-        name="player_plasma_aura",
-        model="sphere",
-        position=Vec3(0.0, -0.2, 0.0),
-        scale=Vec3(1.75, 1.95, 1.75),
-        color=rgba_color(0.3, 0.72, 1.0, 0.16),
-        unlit=True,
-    )
-    contrails = (
-        Entity(
-            parent=player,
-            name="player_contrail_left",
-            model="cube",
-            position=Vec3(-0.22, -1.45, -0.62),
-            scale=Vec3(0.1, 2.4, 0.1),
-            color=rgba_color(0.45, 0.89, 1.0, 0.28),
-            unlit=True,
-        ),
-        Entity(
-            parent=player,
-            name="player_contrail_right",
-            model="cube",
-            position=Vec3(0.22, -1.45, -0.62),
-            scale=Vec3(0.1, 2.4, 0.1),
-            color=rgba_color(0.45, 0.89, 1.0, 0.28),
-            unlit=True,
-        ),
-    )
-    return PlayerVisualState(contrails=contrails, aura=aura)
 
 
 def update_player_visual_state(
@@ -401,64 +297,6 @@ def update_player_visual_state(
             1.0,
             lerp_scalar(0.2, 0.52, speed_factor),
         )
-
-
-def configure_camera() -> None:
-    """Set up base camera parent and transform defaults."""
-    camera.parent = scene
-    camera.rotation = Vec3(0.0, 0.0, 0.0)
-
-
-def apply_camera_post_process(shader: object | None) -> None:
-    """Apply one camera post process shader, or fully disable post process."""
-    if shader is None:
-        filter_manager = getattr(camera, "filter_manager", None)
-        if filter_manager is not None:
-            with suppress(Exception):
-                filter_manager.cleanup()
-        filter_quad = getattr(camera, "filter_quad", None)
-        if filter_quad is not None:
-            with suppress(Exception):
-                filter_quad.removeNode()
-        camera.filter_manager = None
-        camera.filter_quad = None
-        # SLF001: private access; Ursina uses _shader for filters.
-        # pylint: disable=protected-access  # W0212: Ursina internal shader.
-        camera._shader = None  # noqa: SLF001
-        return
-
-    camera.shader = shader
-
-
-def create_camera_orbit_rig(settings: GameSettings) -> OrbitRig:
-    """Create yaw and pitch pivots used for stable orbit controls."""
-    yaw_pivot = Entity(name="camera_yaw_pivot", parent=scene)
-    pitch_pivot = Entity(name="camera_pitch_pivot", parent=yaw_pivot)
-    camera.parent = pitch_pivot
-    camera.position = Vec3(0.0, 0.0, -settings.camera.distance)
-    camera.rotation = Vec3(0.0, 0.0, 0.0)
-    return OrbitRig(yaw_pivot=yaw_pivot, pitch_pivot=pitch_pivot)
-
-
-def configure_mouse_capture() -> None:
-    """Capture the mouse cursor for camera look controls."""
-    mouse.locked = True
-    mouse.visible = False
-
-
-def configure_lighting(focus_entity: Entity) -> LightingRig:
-    """Create one sun light and ambient fill without drop shadows."""
-    sun_direction = Vec3(0.75, -1.2, -0.45).normalized()
-    key_light = DirectionalLight(shadows=False)
-    key_light.color = color_module.white
-    key_light.look_at(sun_direction)
-
-    ambient_light = AmbientLight()
-    ambient_light.color = color_module.rgba(0.24, 0.26, 0.31, 1.0)
-
-    _ = focus_entity
-
-    return LightingRig(key_light=key_light, ambient_light=ambient_light)
 
 
 # C901: too-complex; PLR0915: too-many-statements.
@@ -720,7 +558,6 @@ def start_next_music_track(
 
 def resume_music_after_pause(
     *,
-    music_state: dict[str, Audio | None],
     music_playlist: list[Path],
     track_path: Path | None,
 ) -> tuple[Audio | None, Path | None]:
@@ -733,7 +570,9 @@ def resume_music_after_pause(
 
 def schedule_random_yaw(run_state: FallingRunState) -> None:
     """Schedule the next randomized camera yaw change."""
-    jitter = (Random().random() - 0.5) * 2.0 * RANDOM_YAW_INTERVAL_JITTER
+    # S311: non-crypto RNG; B311: gameplay randomness.
+    random_jitter = Random().random()  # noqa: S311  # nosec B311
+    jitter = (random_jitter - 0.5) * 2.0 * RANDOM_YAW_INTERVAL_JITTER
     interval = max(10.0, RANDOM_YAW_INTERVAL_SECONDS * (1.0 + jitter))
     run_state.random_yaw_next_at = monotonic() + interval
 
@@ -757,8 +596,12 @@ def maybe_update_random_yaw(
             RANDOM_YAW_MIN_DELTA,
             min(160.0, max_angle),
         )
-        delta = Random().uniform(delta_range, min(175.0, delta_range * 1.6))
-        if Random().random() < 0.5:
+        # S311: non-crypto RNG; B311: gameplay randomness.
+        delta = Random().uniform(  # noqa: S311  # nosec B311
+            delta_range,
+            min(175.0, delta_range * 1.6),
+        )
+        if Random().random() < 0.5:  # noqa: S311, PLR2004  # nosec B311
             delta *= -1.0
         run_state.random_yaw_target = camera_state.yaw_angle + delta
         schedule_random_yaw(run_state)
@@ -766,16 +609,20 @@ def maybe_update_random_yaw(
     if run_state.random_yaw_target is None:
         return yaw_turn_axis
 
-    if abs(yaw_turn_axis) > 0.02:
+    if abs(yaw_turn_axis) > 0.02:  # noqa: PLR2004
         run_state.random_yaw_target = None
         return yaw_turn_axis
 
-    delta = run_state.random_yaw_target - camera_state.yaw_angle
-    if abs(delta) <= 1.0:
+    random_yaw_target = run_state.random_yaw_target
+    if random_yaw_target is None:
+        return yaw_turn_axis
+    yaw_delta: float = random_yaw_target - camera_state.yaw_angle
+    if abs(yaw_delta) <= 1.0:
         run_state.random_yaw_target = None
         return yaw_turn_axis
 
-    return max(-1.0, min(1.0, delta / max(1.0, settings.movement.yaw_turn_speed)))
+    yaw_divisor = float(max(1.0, settings.movement.yaw_turn_speed))
+    return max(-1.0, min(1.0, yaw_delta / yaw_divisor))
 
 
 def destroy_entity_tree(entity: Entity) -> None:
@@ -1067,35 +914,6 @@ def animate_spawned_objects(  # noqa: C901, PLR0912, PLR0915
     run_state.spawned_objects = survivors
 
 
-def update_camera_tracking(
-    *,
-    player: Entity,
-    orbit_rig: OrbitRig,
-    camera_state: CameraState,
-    camera_settings: CameraSettings,
-    look_velocity: Vec3,
-) -> None:
-    """Update orbit camera pivots and zoom using current look input."""
-    camera_state.yaw_angle, camera_state.pitch_angle = compute_look_angles(
-        yaw_angle=camera_state.yaw_angle,
-        pitch_angle=camera_state.pitch_angle,
-        look_velocity=look_velocity,
-        mouse_look_speed=camera_settings.mouse_look_speed,
-        min_pitch=camera_settings.min_pitch,
-        max_pitch=camera_settings.max_pitch,
-    )
-
-    orbit_rig.yaw_pivot.world_position = player.world_position + Vec3(
-        0.0,
-        camera_settings.height,
-        0.0,
-    )
-    orbit_rig.yaw_pivot.rotation = Vec3(0.0, camera_state.yaw_angle, 0.0)
-    orbit_rig.pitch_pivot.rotation = Vec3(camera_state.pitch_angle, 0.0, 0.0)
-    camera.position = Vec3(0.0, 0.0, -camera_state.distance)
-    camera.rotation_z = 0.0
-
-
 # PLR0913: too-many-arguments; explicit inputs.
 def apply_player_movement(  # noqa: PLR0913
     # pylint: disable=too-many-arguments,too-many-locals
@@ -1254,7 +1072,7 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
     reset_run()
 
     # C901: too-complex; per-frame flow.
-    def controller_update() -> None:  # noqa: C901  # C901: complex; per-frame flow.
+    def controller_update() -> None:  # noqa: C901, PLR0915
         nonlocal music_track_path
         held = cast("dict[str, float]", getattr(ursina, "held_keys", {}))
         mouse_velocity = cast("Vec3", getattr(mouse, "velocity", Vec3(0.0, 0.0, 0.0)))
@@ -1422,8 +1240,7 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
     # C901: too-complex; input branching.
     def controller_input(key: str) -> None:  # noqa: C901
         # C901: complex; input branching.
-        nonlocal post_process_index
-        nonlocal music_track_path
+        nonlocal post_process_index, music_track_path
 
         if key == "escape":
             application.quit()
@@ -1456,7 +1273,6 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
                     music_state["track"].pause()
             else:
                 music_state["track"], music_track_path = resume_music_after_pause(
-                    music_state=music_state,
                     music_playlist=music_playlist,
                     track_path=music_track_path,
                 )
