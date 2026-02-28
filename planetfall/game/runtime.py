@@ -123,6 +123,9 @@ ASTEROID_DIFFUSE_TEXTURE_BY_MODEL: dict[str, str] = {
 ASTEROID_SCALE_MIN = 0.6
 ASTEROID_SCALE_MAX = 2.5
 COIN_PATTERN_SWITCH_SECONDS = 40.0
+RANDOM_YAW_INTERVAL_SECONDS = 60.0
+RANDOM_YAW_INTERVAL_JITTER = 0.35
+RANDOM_YAW_MIN_DELTA = 25.0
 SCROLL_DIRECTION_BY_KEY = {
     "scroll up": 1,
     "scroll down": -1,
@@ -695,6 +698,53 @@ def update_coin_pattern_timer(run_state: FallingRunState) -> None:
     run_state.coin_pattern_index += 1
 
 
+def schedule_random_yaw(run_state: FallingRunState) -> None:
+    """Schedule the next randomized camera yaw change."""
+    jitter = (Random().random() - 0.5) * 2.0 * RANDOM_YAW_INTERVAL_JITTER
+    interval = max(10.0, RANDOM_YAW_INTERVAL_SECONDS * (1.0 + jitter))
+    run_state.random_yaw_next_at = monotonic() + interval
+
+
+def maybe_update_random_yaw(
+    run_state: FallingRunState,
+    *,
+    camera_state: CameraState,
+    yaw_turn_axis: float,
+    settings: GameSettings,
+) -> float:
+    """Return yaw axis override when random yaw should steer the camera."""
+    now = monotonic()
+    if run_state.random_yaw_next_at <= 0.0:
+        schedule_random_yaw(run_state)
+        return yaw_turn_axis
+
+    if run_state.random_yaw_target is None and now >= run_state.random_yaw_next_at:
+        max_angle = settings.movement.yaw_turn_speed * 0.9
+        delta_range = max(
+            RANDOM_YAW_MIN_DELTA,
+            min(160.0, max_angle),
+        )
+        delta = Random().uniform(delta_range, min(175.0, delta_range * 1.6))
+        if Random().random() < 0.5:
+            delta *= -1.0
+        run_state.random_yaw_target = camera_state.yaw_angle + delta
+        schedule_random_yaw(run_state)
+
+    if run_state.random_yaw_target is None:
+        return yaw_turn_axis
+
+    if abs(yaw_turn_axis) > 0.02:
+        run_state.random_yaw_target = None
+        return yaw_turn_axis
+
+    delta = run_state.random_yaw_target - camera_state.yaw_angle
+    if abs(delta) <= 1.0:
+        run_state.random_yaw_target = None
+        return yaw_turn_axis
+
+    return max(-1.0, min(1.0, delta / max(1.0, settings.movement.yaw_turn_speed)))
+
+
 def destroy_entity_tree(entity: Entity) -> None:
     """Destroy an entity and any child entities to avoid scene leaks."""
     for child in list(entity.children):
@@ -1139,6 +1189,8 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
         camera_state.distance = settings.camera.distance
         apply_camera_post_process(CAMERA_POST_PROCESS_OPTIONS[post_process_index][1])
         pause_text.enabled = False
+        run_state.random_yaw_target = None
+        schedule_random_yaw(run_state)
         if music_state["track"] is not None:
             music_state["track"].play()
         if boost_state["track"] is not None:
@@ -1172,6 +1224,12 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
         x_axis, z_axis, dive_axis, yaw_turn_axis, look_velocity = compute_control_axes(
             held,
             mouse_velocity,
+        )
+        yaw_turn_axis = maybe_update_random_yaw(
+            run_state,
+            camera_state=camera_state,
+            yaw_turn_axis=yaw_turn_axis,
+            settings=settings,
         )
 
         if not run_state.is_paused:
