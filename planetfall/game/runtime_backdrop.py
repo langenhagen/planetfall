@@ -3,6 +3,7 @@
 import importlib
 from math import cos, sin, tau
 from pathlib import Path
+from random import Random
 from time import monotonic
 from typing import cast
 
@@ -20,6 +21,15 @@ SKY_BLEND_MIN_TEXTURES = 2
 PLANET_APPROACH_DEPTH = 1600.0
 MOTION_MOTE_COUNT = 24
 MOTION_MOTE_VERTICAL_SPAN = 72.0
+SPACE_PARTICLE_COUNT = 96
+SPACE_PARTICLE_RADIUS_MIN = 2.0
+SPACE_PARTICLE_RADIUS_MAX = 6.0
+SPACE_PARTICLE_DEPTH_SPAN = 120.0
+SPACE_PARTICLE_START_OFFSET = -100.0
+SPACE_PARTICLE_SCALE_MIN = 0.006
+SPACE_PARTICLE_SCALE_MAX = 0.02
+SPACE_PARTICLE_SWIRL_RATE = 0.08
+SPACE_PARTICLE_DRIFT_RATE = 14.0
 
 SKY_BLEND_SHADER = Shader(
     name="sky_blend_shader",
@@ -46,7 +56,8 @@ void main() {
 )
 
 
-def create_space_backdrop() -> BackdropState:
+# R0914: keep explicit particle tuning locals.
+def create_space_backdrop() -> BackdropState:  # pylint: disable=too-many-locals
     """Create HDRI sky plus light atmospheric motion cues."""
     sky_module = importlib.import_module("ursina.prefabs.sky")
     sky_factory = cast("type[Entity]", sky_module.Sky)
@@ -65,9 +76,51 @@ def create_space_backdrop() -> BackdropState:
         for mote_index in range(MOTION_MOTE_COUNT)
     ]
 
+    space_particles: list[Entity] = []
+    for particle_index in range(SPACE_PARTICLE_COUNT):
+        ratio = particle_index / max(1, SPACE_PARTICLE_COUNT - 1)
+        # S311: non-crypto RNG; B311: gameplay variance.
+        rng = Random(12_345 + particle_index)  # noqa: S311  # nosec B311
+        radius = lerp_scalar(
+            SPACE_PARTICLE_RADIUS_MIN,
+            SPACE_PARTICLE_RADIUS_MAX,
+            rng.random(),
+        )
+        scale = lerp_scalar(
+            SPACE_PARTICLE_SCALE_MIN,
+            SPACE_PARTICLE_SCALE_MAX,
+            rng.random(),
+        )
+        depth_offset = rng.uniform(0.0, SPACE_PARTICLE_DEPTH_SPAN)
+        phase = rng.uniform(0.0, tau * 2.0)
+        wobble_rate = rng.uniform(0.4, 1.4)
+        wobble_amp = rng.uniform(0.2, 1.4)
+        drift_bias = rng.uniform(-2.2, 2.2)
+        particle = Entity(
+            name=f"space_particle_{particle_index}",
+            model="sphere",
+            position=Vec3(0.0, 0.0, 0.0),
+            scale=Vec3(scale, scale, scale),
+            color=rgba_color(0.98, 0.99, 1.0, 0.55),
+            unlit=True,
+        )
+        # W0212: store per-particle phase data on the entity.
+        # pylint: disable=protected-access
+        particle._space_phase = phase + (ratio * tau * 2.0)  # noqa: SLF001
+        particle._space_radius = radius  # noqa: SLF001
+        particle._space_depth_offset = depth_offset  # noqa: SLF001
+        particle._space_scale = scale  # noqa: SLF001
+        particle._space_swirl_rate = SPACE_PARTICLE_SWIRL_RATE  # noqa: SLF001
+        particle._space_drift_rate = SPACE_PARTICLE_DRIFT_RATE  # noqa: SLF001
+        particle._space_wobble_rate = wobble_rate  # noqa: SLF001
+        particle._space_wobble_amp = wobble_amp  # noqa: SLF001
+        particle._space_drift_bias = drift_bias  # noqa: SLF001
+        space_particles.append(particle)
+
     return BackdropState(
         sky=sky_entity,
         motion_motes=tuple(motion_motes),
+        space_particles=tuple(space_particles),
     )
 
 
@@ -174,7 +227,8 @@ def update_sky_texture_blend(
     sky_entity.set_shader_input("blend_factor", blend_factor)
 
 
-def update_atmosphere_for_depth(
+# R0914: keep explicit atmosphere/particle tuning locals.
+def update_atmosphere_for_depth(  # pylint: disable=too-many-locals
     *,
     player: Entity,
     lighting_rig: LightingRig,
@@ -223,3 +277,52 @@ def update_atmosphere_for_depth(
             1.0,
             lerp_scalar(0.08, 0.32, speed_factor),
         )
+
+    if backdrop_state.space_particles:
+        # W0212: read per-particle phase data from the entity.
+        # pylint: disable=protected-access
+        for particle in backdrop_state.space_particles:
+            phase = cast("float", getattr(particle, "_space_phase", 0.0))
+            radius = cast("float", getattr(particle, "_space_radius", 0.0))
+            depth_offset = cast(
+                "float",
+                getattr(particle, "_space_depth_offset", 0.0),
+            )
+            scale = cast("float", getattr(particle, "_space_scale", 0.1))
+            swirl_rate = cast(
+                "float",
+                getattr(particle, "_space_swirl_rate", SPACE_PARTICLE_SWIRL_RATE),
+            )
+            drift_rate = cast(
+                "float",
+                getattr(particle, "_space_drift_rate", SPACE_PARTICLE_DRIFT_RATE),
+            )
+            wobble_rate = cast(
+                "float",
+                getattr(particle, "_space_wobble_rate", 1.0),
+            )
+            wobble_amp = cast(
+                "float",
+                getattr(particle, "_space_wobble_amp", 0.0),
+            )
+            drift_bias = cast(
+                "float",
+                getattr(particle, "_space_drift_bias", 0.0),
+            )
+            wobble = sin((runtime_time * wobble_rate) + phase) * wobble_amp
+            angle = phase + (runtime_time * swirl_rate) + (wobble * 0.18)
+            depth = ((runtime_time * drift_rate) + depth_offset) % (
+                SPACE_PARTICLE_DEPTH_SPAN
+            )
+            particle.position = Vec3(
+                player.x + (cos(angle) * (radius + wobble)),
+                player.y + SPACE_PARTICLE_START_OFFSET + depth,
+                player.z + (sin(angle) * (radius + wobble)) + drift_bias,
+            )
+            particle.scale = Vec3(scale, scale, scale)
+            particle.color = rgba_color(
+                lerp_scalar(0.88, 0.98, progress),
+                lerp_scalar(0.94, 1.0, progress),
+                1.0,
+                lerp_scalar(0.32, 0.6, speed_factor),
+            )

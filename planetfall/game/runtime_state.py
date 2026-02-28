@@ -101,6 +101,7 @@ class BackdropState:
 
     sky: Entity
     motion_motes: tuple[Entity, ...]
+    space_particles: tuple[Entity, ...]
 
 
 @dataclass(frozen=True, slots=True)
