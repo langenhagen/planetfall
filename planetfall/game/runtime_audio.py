@@ -116,20 +116,3 @@ def start_music_track(track_path: Path) -> Audio:
         auto_destroy=True,
         volume=MUSIC_VOLUME,
     )
-
-
-def advance_music_playlist(
-    *,
-    current_track: Audio | None,
-    playlist: list[Path],
-) -> Audio | None:
-    """Advance to the next track when the current one finishes."""
-    if current_track is not None and current_track.playing:
-        return current_track
-
-    if not playlist:
-        playlist.extend(build_music_playlist())
-        if not playlist:
-            return None
-
-    return start_music_track(playlist.pop(0))
