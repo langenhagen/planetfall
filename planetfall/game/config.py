@@ -4,7 +4,8 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True, slots=True)
-class MovementSettings:
+class MovementSettings:  # pylint: disable=too-many-instance-attributes
+    # R0902: grouped tuning fields.
     """Horizontal steering and player tilt settings."""
 
     horizontal_speed: float = 18.0
@@ -21,7 +22,8 @@ class MovementSettings:
 
 
 @dataclass(frozen=True, slots=True)
-class FallSettings:
+class FallSettings:  # pylint: disable=too-many-instance-attributes
+    # R0902: grouped tuning fields.
     """Vertical speed and endless spawning window settings."""
 
     base_speed: float = 40.3
@@ -35,7 +37,8 @@ class FallSettings:
 
 
 @dataclass(frozen=True, slots=True)
-class GameplayTuningSettings:
+class GameplayTuningSettings:  # pylint: disable=too-many-instance-attributes
+    # R0902: grouped tuning fields.
     """Tunable gameplay constants used across spawn and collision systems."""
 
     obstacle_hit_cooldown_seconds: float = 0.45
@@ -50,7 +53,8 @@ class GameplayTuningSettings:
 
 
 @dataclass(frozen=True, slots=True)
-class CameraSettings:
+class CameraSettings:  # pylint: disable=too-many-instance-attributes
+    # R0902: grouped tuning fields.
     """Third-person orbit camera settings for the falling avatar."""
 
     mouse_look_speed: float = 120.0
@@ -65,7 +69,8 @@ class CameraSettings:
 
 
 @dataclass(frozen=True, slots=True)
-class GameSettings:
+class GameSettings:  # pylint: disable=too-many-instance-attributes
+    # R0902: grouped tuning fields.
     """Settings used to bootstrap and tune the game runtime."""
 
     window_title: str = "Planetfall"

@@ -136,7 +136,9 @@ def lerp_scalar(start_value: float, end_value: float, factor: float) -> float:
     return start_value + ((end_value - start_value) * factor)
 
 
-def compute_smoothed_lateral_speed(
+# PLR0913: too-many-arguments; explicit inputs.
+def compute_smoothed_lateral_speed(  # noqa: PLR0913
+    # pylint: disable=too-many-arguments
     *,
     current_speed: float,
     axis_input: float,
@@ -145,6 +147,7 @@ def compute_smoothed_lateral_speed(
     deceleration_rate: float,
     dt: float,
 ) -> float:
+    # R0913: explicit tuning inputs.
     """Smooth horizontal speed changes for gentle acceleration/deceleration."""
     if dt <= 0.0:
         return current_speed
@@ -181,7 +184,8 @@ def compute_fall_speed(
     return max(base_speed * 0.2, speed)
 
 
-def compute_look_angles(
+# PLR0913: too-many-arguments; explicit inputs.
+def compute_look_angles(  # noqa: PLR0913  # pylint: disable=too-many-arguments
     *,
     yaw_angle: float,
     pitch_angle: float,
@@ -190,6 +194,7 @@ def compute_look_angles(
     min_pitch: float,
     max_pitch: float,
 ) -> tuple[float, float]:
+    # R0913: explicit tuning inputs.
     """Update camera yaw/pitch from look input and clamp pitch limits."""
     next_yaw = yaw_angle + (look_velocity.x * mouse_look_speed)
     next_pitch = pitch_angle + (look_velocity.y * mouse_look_speed)

@@ -8,7 +8,8 @@ SPACE_ZONE_DEPTH_LIMIT = 420.0
 ATMOSPHERE_ZONE_DEPTH_LIMIT = 980.0
 
 
-class RunStateLike(Protocol):
+class RunStateLike(Protocol):  # pylint: disable=too-few-public-methods
+    # R0903: protocol defines shape only.
     """Minimal run-state shape required by HUD rendering."""
 
     score: int
