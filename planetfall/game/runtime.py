@@ -82,6 +82,7 @@ from .runtime_ui import (
 )
 from .scene import (
     BAND_SPACING,
+    COIN_PATTERN_COUNT,
     COIN_SCORE_VALUE,
     FallingBlueprint,
     build_fall_band_blueprints,
@@ -694,7 +695,9 @@ def update_coin_pattern_timer(run_state: FallingRunState) -> None:
     if now - run_state.coin_pattern_started_at < COIN_PATTERN_SWITCH_SECONDS:
         return
     run_state.coin_pattern_started_at = now
-    run_state.coin_pattern_index = (run_state.coin_pattern_index + 1) % 5
+    run_state.coin_pattern_index = (
+        run_state.coin_pattern_index + 1
+    ) % COIN_PATTERN_COUNT
 
 
 def start_next_music_track(

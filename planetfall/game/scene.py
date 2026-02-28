@@ -24,8 +24,8 @@ HIGH_VALUE_COIN_SCORE_VALUE = 25  # Bonus coin value (halo-highlighted).
 MAX_COLLIDABLE_ABS = 6.0 * TUNNEL_WIDTH_SCALE  # Clamp for obstacle/coin placement.
 MAX_COIN_ABS = 5.0 * TUNNEL_WIDTH_SCALE  # Keep coin lanes slightly tighter.
 OBSTACLE_DENSITY_MULTIPLIER = 0.9  # Reduce asteroid count by ~10%.
-COIN_PATTERN_COUNT = 5
-OBSTACLE_PATTERN_COUNT = 7
+COIN_PATTERN_COUNT = 9
+OBSTACLE_PATTERN_COUNT = 9
 PATTERN_GATE = 0
 PATTERN_SLALOM = 1
 PATTERN_CHICANE = 2  # Pattern index for alternating dual-row gates.
@@ -33,6 +33,8 @@ PATTERN_RING_GAP = 3  # Pattern index for ring obstacle with one open sector.
 PATTERN_COMET = 4
 PATTERN_CHECKER = 5
 PATTERN_SPIRAL = 6
+PATTERN_ORBIT = 7
+PATTERN_SCATTER = 8
 # Small-length guard to avoid divide-by-zero normalization.
 PATH_DIRECTION_EPSILON = 1e-4
 RING_GAP_ANGLE_THRESHOLD = 0.52  # Angular width of the safe opening in ring patterns.
@@ -93,9 +95,28 @@ def build_fall_band_blueprints(
         blueprints.extend(
             _coin_ribbon_blueprints(y_position=y_position, band_index=band_index),
         )
-    else:
+    elif coin_pattern == 4:
         blueprints.extend(
             _coin_grid_blueprints(y_position=y_position, band_index=band_index),
+        )
+    elif coin_pattern == 5:
+        blueprints.extend(
+            _coin_orbit_blueprints(y_position=y_position, band_index=band_index),
+        )
+    elif coin_pattern == 6:
+        blueprints.extend(
+            _coin_zigzag_blueprints(y_position=y_position, band_index=band_index),
+        )
+    elif coin_pattern == 7:
+        blueprints.extend(
+            _coin_spiral_blueprints(y_position=y_position, band_index=band_index),
+        )
+    else:
+        blueprints.extend(
+            _coin_double_spiral_blueprints(
+                y_position=y_position,
+                band_index=band_index,
+            ),
         )
 
     pattern = band_index % OBSTACLE_PATTERN_COUNT
@@ -126,9 +147,20 @@ def build_fall_band_blueprints(
                 band_index=band_index,
             ),
         )
-    else:
+    elif pattern == PATTERN_SPIRAL:
         blueprints.extend(
             _spiral_pattern_blueprints(y_position=y_position, band_index=band_index),
+        )
+    elif pattern == PATTERN_ORBIT:
+        blueprints.extend(
+            _orbit_cluster_pattern_blueprints(
+                y_position=y_position,
+                band_index=band_index,
+            ),
+        )
+    else:
+        blueprints.extend(
+            _scatter_pattern_blueprints(y_position=y_position, band_index=band_index),
         )
 
     if band_index % 7 == 0:
@@ -435,6 +467,116 @@ def _coin_grid_blueprints(
     return tuple(blueprints)
 
 
+def _coin_orbit_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[FallingBlueprint, ...]:
+    center = _path_center(band_index)
+    radius = 2.6 * TUNNEL_WIDTH_SCALE
+    count = 8
+    blueprints: list[FallingBlueprint] = []
+
+    for index in range(count):
+        angle = ((tau / count) * index) + (band_index * 0.18)
+        lift = 0.45 + (0.08 if index % 2 == 0 else 0.0)
+        blueprints.append(
+            _coin_blueprint(
+                name=f"coin_orbit_{index}",
+                x_pos=center.x + (cos(angle) * radius),
+                y_pos=y_position + lift,
+                z_pos=center.z + (sin(angle) * radius),
+            ),
+        )
+
+    return tuple(blueprints)
+
+
+def _coin_zigzag_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[FallingBlueprint, ...]:
+    center = _path_center(band_index)
+    direction = _path_direction(band_index)
+    side = Vec3(-direction.z, 0.0, direction.x)
+    blueprints: list[FallingBlueprint] = []
+    count = 7
+
+    for index in range(count):
+        forward = (index - 3) * (COIN_CHAIN_FORWARD_OFFSET * 0.55)
+        lateral = (1.0 if index % 2 == 0 else -1.0) * (COIN_CHAIN_SIDE_OFFSET * 1.1)
+        lift = 0.45 + (abs(index - 3) * 0.03)
+        blueprints.append(
+            _coin_blueprint(
+                name=f"coin_zigzag_{index}",
+                x_pos=center.x + (direction.x * forward) + (side.x * lateral),
+                y_pos=y_position + lift,
+                z_pos=center.z + (direction.z * forward) + (side.z * lateral),
+            ),
+        )
+
+    return tuple(blueprints)
+
+
+def _coin_spiral_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[FallingBlueprint, ...]:
+    center = _path_center(band_index)
+    base_angle = band_index * 0.24
+    radius_start = 0.8 * TUNNEL_WIDTH_SCALE
+    radius_step = 0.55 * TUNNEL_WIDTH_SCALE
+    blueprints: list[FallingBlueprint] = []
+    count = 9
+
+    for index in range(count):
+        radius = radius_start + (index * radius_step)
+        angle = base_angle + (index * 0.72)
+        lift = 0.45 + (index * 0.04)
+        blueprints.append(
+            _coin_blueprint(
+                name=f"coin_spiral_{index}",
+                x_pos=center.x + (cos(angle) * radius),
+                y_pos=y_position + lift,
+                z_pos=center.z + (sin(angle) * radius),
+            ),
+        )
+
+    return tuple(blueprints)
+
+
+def _coin_double_spiral_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[FallingBlueprint, ...]:
+    center = _path_center(band_index)
+    base_angle = band_index * 0.21
+    radius_start = 1.0 * TUNNEL_WIDTH_SCALE
+    radius_step = 0.45 * TUNNEL_WIDTH_SCALE
+    blueprints: list[FallingBlueprint] = []
+    count = 10
+
+    for index in range(count):
+        arm_angle = base_angle + (index * 0.68)
+        if index % 2 == 1:
+            arm_angle += tau * 0.5
+        radius = radius_start + (index * radius_step)
+        lift = 0.45 + ((index % 3) * 0.05)
+        blueprints.append(
+            _coin_blueprint(
+                name=f"coin_double_spiral_{index}",
+                x_pos=center.x + (cos(arm_angle) * radius),
+                y_pos=y_position + lift,
+                z_pos=center.z + (sin(arm_angle) * radius),
+            ),
+        )
+
+    return tuple(blueprints)
+
+
 def _gate_pattern_blueprints(
     *,
     y_position: float,
@@ -632,6 +774,65 @@ def _spiral_pattern_blueprints(
                 z_pos=sin(angle) * radius,
                 scale=Vec3(1.7, 1.7, 1.7),
                 color_name="pink",
+            ),
+        )
+
+    return tuple(blueprints)
+
+
+def _orbit_cluster_pattern_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[FallingBlueprint, ...]:
+    center = _path_center(band_index)
+    count = 7
+    base_radius = 2.4 * TUNNEL_WIDTH_SCALE
+    blueprints: list[FallingBlueprint] = []
+
+    for index in range(count):
+        angle = ((tau / count) * index) + (band_index * 0.27)
+        radius = base_radius + (
+            sin((band_index * 0.33) + (index * 1.4)) * (0.6 * TUNNEL_WIDTH_SCALE)
+        )
+        scale = 1.5 + (0.2 * sin((band_index * 0.41) + index))
+        blueprints.append(
+            _obstacle_blueprint(
+                name=f"orbit_block_{index}",
+                x_pos=center.x + (cos(angle) * radius),
+                y_pos=y_position,
+                z_pos=center.z + (sin(angle) * radius),
+                scale=Vec3(scale, scale, scale),
+                color_name="azure",
+            ),
+        )
+
+    return tuple(blueprints)
+
+
+def _scatter_pattern_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[FallingBlueprint, ...]:
+    center = _path_center(band_index)
+    blueprints: list[FallingBlueprint] = []
+    colors = ("orange", "yellow", "red", "cyan", "lime", "violet")
+
+    for index in range(6):
+        angle = (band_index * 0.37) + (index * 1.91)
+        radius = (
+            1.8 + ((sin((band_index * 0.53) + (index * 2.1)) + 1.0) * 0.5 * 3.4)
+        ) * TUNNEL_WIDTH_SCALE
+        scale = 1.35 + ((sin((band_index * 0.61) + index) + 1.0) * 0.5 * 0.6)
+        blueprints.append(
+            _obstacle_blueprint(
+                name=f"scatter_block_{index}",
+                x_pos=center.x + (cos(angle) * radius),
+                y_pos=y_position,
+                z_pos=center.z + (sin(angle) * radius),
+                scale=Vec3(scale, scale, scale),
+                color_name=colors[index % len(colors)],
             ),
         )
 

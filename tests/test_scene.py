@@ -5,6 +5,7 @@ from unittest import TestCase
 
 from planetfall.game.scene import (
     COIN_MODEL_NAME,
+    COIN_PATTERN_COUNT,
     COIN_SCORE_VALUE,
     HIGH_VALUE_COIN_SCORE_VALUE,
     LANE_POSITIONS,
@@ -158,7 +159,70 @@ def test_obstacle_patterns_cover_all_variants() -> None:
             seen_patterns.add("checker")
         if any(name.startswith("spiral_block") for name in obstacle_names):
             seen_patterns.add("spiral")
+        if any(name.startswith("orbit_block") for name in obstacle_names):
+            seen_patterns.add("orbit")
+        if any(name.startswith("scatter_block") for name in obstacle_names):
+            seen_patterns.add("scatter")
     CHECKER.assertEqual(
         seen_patterns,
-        {"gate", "slalom", "chicane", "ring", "comet", "checker", "spiral"},
+        {
+            "gate",
+            "slalom",
+            "chicane",
+            "ring",
+            "comet",
+            "checker",
+            "spiral",
+            "orbit",
+            "scatter",
+        },
+    )
+
+
+def test_coin_patterns_cover_all_variants() -> None:
+    """Exercise each coin pattern index at least once."""
+    seen_patterns = set()
+    for band_index in range(COIN_PATTERN_COUNT * 3):
+        blueprints = build_fall_band_blueprints(
+            band_index=band_index,
+            y_position=-80.0,
+            rng=deterministic_rng(31),
+            coin_pattern_index=band_index,
+        )
+        coin_names = {
+            blueprint.name
+            for blueprint in blueprints
+            if blueprint.entity_kind == "coin"
+        }
+        if any(name.startswith("coin_chain") for name in coin_names):
+            seen_patterns.add("chain")
+        if any(name.startswith("coin_wave") for name in coin_names):
+            seen_patterns.add("wave")
+        if any(name.startswith("coin_fan") for name in coin_names):
+            seen_patterns.add("fan")
+        if any(name.startswith("coin_ribbon") for name in coin_names):
+            seen_patterns.add("ribbon")
+        if any(name.startswith("coin_grid") for name in coin_names):
+            seen_patterns.add("grid")
+        if any(name.startswith("coin_orbit") for name in coin_names):
+            seen_patterns.add("orbit")
+        if any(name.startswith("coin_zigzag") for name in coin_names):
+            seen_patterns.add("zigzag")
+        if any(name.startswith("coin_spiral") for name in coin_names):
+            seen_patterns.add("spiral")
+        if any(name.startswith("coin_double_spiral") for name in coin_names):
+            seen_patterns.add("double_spiral")
+    CHECKER.assertEqual(
+        seen_patterns,
+        {
+            "chain",
+            "wave",
+            "fan",
+            "ribbon",
+            "grid",
+            "orbit",
+            "zigzag",
+            "spiral",
+            "double_spiral",
+        },
     )
