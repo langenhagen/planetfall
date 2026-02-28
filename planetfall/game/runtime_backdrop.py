@@ -14,12 +14,6 @@ from .runtime_colors import lerp_rgb_color, rgba_color
 from .runtime_controls import lerp_scalar
 from .runtime_state import BackdropState, LightingRig
 
-SPACE_SKY_DIR = ASSETS_DIR / "sky" / "NightSkyHDRI009_4K"
-SPACE_SKY_TEXTURE_CANDIDATES = (
-    "NightSkyHDRI009_4K_TONEMAPPED.jpg",
-    "NightSkyHDRI009.png",
-    "NightSkyHDRI009_4K_HDR.exr",
-)
 SKY_BLEND_HOLD_SECONDS = 24.0
 SKY_BLEND_DURATION_SECONDS = 6.0
 SKY_BLEND_MIN_TEXTURES = 2
@@ -77,15 +71,6 @@ def create_space_backdrop() -> BackdropState:
     )
 
 
-def resolve_space_sky_texture_path() -> Path | None:
-    """Resolve a custom sky texture path from the NightSkyHDRI asset folder."""
-    for file_name in SPACE_SKY_TEXTURE_CANDIDATES:
-        candidate = Path(SPACE_SKY_DIR / file_name)
-        if candidate.exists():
-            return candidate
-    return None
-
-
 def resolve_space_sky_texture_paths() -> tuple[Path, ...]:
     """Resolve all available sky textures for timed cross-fade cycling."""
     resolved: list[Path] = []
@@ -98,10 +83,6 @@ def resolve_space_sky_texture_paths() -> tuple[Path, ...]:
                 if path.is_file()
             ),
         )
-
-    fallback_texture = resolve_space_sky_texture_path()
-    if fallback_texture is not None and fallback_texture not in resolved:
-        resolved.append(fallback_texture)
 
     seen: set[Path] = set()
     deduped: list[Path] = []
