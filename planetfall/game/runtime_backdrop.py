@@ -9,10 +9,10 @@ from typing import cast
 import ursina.color as color_module
 from ursina import Entity, Shader, Vec3, load_texture
 
-from .runtime_assets import ASSETS_DIR
-from .runtime_colors import lerp_rgb_color, rgba_color
-from .runtime_controls import lerp_scalar
-from .runtime_state import BackdropState, LightingRig
+from planetfall.game.runtime_assets import ASSETS_DIR
+from planetfall.game.runtime_colors import lerp_rgb_color, rgba_color
+from planetfall.game.runtime_controls import lerp_scalar
+from planetfall.game.runtime_state import BackdropState, LightingRig
 
 SKY_BLEND_HOLD_SECONDS = 24.0
 SKY_BLEND_DURATION_SECONDS = 6.0

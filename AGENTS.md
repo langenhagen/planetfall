@@ -14,6 +14,7 @@ Practical guidance for humans and coding agents working in this repository.
   clear, maintainable, and testable.
 - Prefer smaller, modular files over monolithic files when adding or refactoring code.
 - Capitalize Markdown headlines (prefer Title Case).
+- Prefer absolute imports (for example `from planetfall.game import scene_base`).
 
 ## Project Stack
 

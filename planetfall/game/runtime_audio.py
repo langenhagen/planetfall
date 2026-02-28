@@ -8,7 +8,7 @@ from typing import Any
 
 from ursina import Audio
 
-from .runtime_assets import ASSETS_DIR
+from planetfall.game.runtime_assets import ASSETS_DIR
 
 COIN_SFX_NAMES = ("audio/sfx/345297_6212127-lq.mp3",)
 IMPACT_SFX_NAMES = ("audio/sfx/explosionCrunch_000.ogg",)

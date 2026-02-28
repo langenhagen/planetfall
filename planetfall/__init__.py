@@ -2,5 +2,5 @@
 
 __all__ = ["main", "run_game"]
 
-from .cli import main
-from .game import run_game
+from planetfall.cli import main
+from planetfall.game import run_game

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, cast
 
 import ursina.color as color_module
 
-from .runtime_controls import lerp_scalar
+from planetfall.game.runtime_controls import lerp_scalar
 
 if TYPE_CHECKING:
     from ursina.color import Color
