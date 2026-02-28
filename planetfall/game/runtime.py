@@ -122,7 +122,7 @@ ASTEROID_DIFFUSE_TEXTURE_BY_MODEL: dict[str, str] = {
 ASTEROID_SCALE_MIN = 0.6
 ASTEROID_SCALE_MAX = 2.5
 COIN_PATTERN_SWITCH_SECONDS = 40.0
-RANDOM_YAW_INTERVAL_SECONDS = 60.0
+RANDOM_YAW_INTERVAL_SECONDS = 45.0
 RANDOM_YAW_INTERVAL_JITTER = 0.35
 RANDOM_YAW_MIN_DELTA = 25.0
 SCROLL_DIRECTION_BY_KEY = {
@@ -694,7 +694,7 @@ def update_coin_pattern_timer(run_state: FallingRunState) -> None:
     if now - run_state.coin_pattern_started_at < COIN_PATTERN_SWITCH_SECONDS:
         return
     run_state.coin_pattern_started_at = now
-    run_state.coin_pattern_index += 1
+    run_state.coin_pattern_index = (run_state.coin_pattern_index + 1) % 5
 
 
 def start_next_music_track(
