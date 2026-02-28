@@ -58,6 +58,20 @@ Ursina exposes standard gamepad names, so PS5 controls map as:
 - `tests/`: test suite
 - `pyproject.toml`: project metadata and tool/lint configuration
 
+## Terminology
+
+- **Band**: one vertical slice of the falling course that gets spawned at a time.
+- **Blueprint**: a data-only spawn description (see `FallingBlueprint`).
+- **Coin pattern**: the coin layout used for a band (chain, wave, fan, ribbon, grid,
+  orbit, zigzag, spiral, double-spiral).
+- **Obstacle pattern**: the asteroid layout used for a band (gate, slalom, chicane,
+  ring-gap, comet, checker, spiral, orbit cluster, scatter field).
+- **Bonus coin arc**: an extra, higher-value arc of coins injected on a cadence.
+- **Extra asteroid**: an extra asteroid injected on a cadence.
+- **Run state**: the mutable gameplay session data (`FallingRunState`).
+- **Orbit rig**: the camera pivot entity chain that orbits around the player.
+- **Motion motes**: the subtle atmosphere streaks that scroll past while falling.
+
 ## Full Setup and Checks
 
 ```bash
