@@ -1,13 +1,17 @@
 """Camera setup and tracking helpers for the runtime."""
 
 from contextlib import suppress
+from math import atan2, degrees
 from typing import TYPE_CHECKING
 
-from ursina import Entity, Vec3, camera, mouse
+from ursina import Entity, Vec3, camera, lerp_exponential_decay, mouse
 from ursina import scene as scene_root
 
 from planetfall.game.runtime_controls import compute_look_angles
 from planetfall.game.runtime_state import CameraState, OrbitRig
+from planetfall.game.scene_base import path_center, path_direction
+
+PATH_EPSILON = 1e-4
 
 if TYPE_CHECKING:
     from planetfall.game.config import CameraSettings, GameSettings
@@ -56,13 +60,71 @@ def configure_mouse_capture() -> None:
     mouse.visible = False
 
 
-def update_camera_tracking(
+def sample_path_center(*, band_progress: float) -> Vec3:
+    """Return an interpolated path center for fractional band indices."""
+    lower = int(band_progress)
+    upper = lower + 1
+    blend = max(0.0, min(1.0, band_progress - lower))
+    lower_anchor = path_center(lower)
+    upper_anchor = path_center(upper)
+    return Vec3(
+        (lower_anchor.x * (1.0 - blend)) + (upper_anchor.x * blend),
+        0.0,
+        (lower_anchor.z * (1.0 - blend)) + (upper_anchor.z * blend),
+    )
+
+
+def sample_path_direction(*, band_progress: float) -> Vec3:
+    """Return an interpolated path direction for fractional band indices."""
+    lower = int(band_progress)
+    upper = lower + 1
+    blend = max(0.0, min(1.0, band_progress - lower))
+    lower_dir = path_direction(lower)
+    upper_dir = path_direction(upper)
+    blended_dir = Vec3(
+        (lower_dir.x * (1.0 - blend)) + (upper_dir.x * blend),
+        0.0,
+        (lower_dir.z * (1.0 - blend)) + (upper_dir.z * blend),
+    )
+    if blended_dir.length() <= PATH_EPSILON:
+        return Vec3(1.0, 0.0, 0.0)
+    return blended_dir.normalized()
+
+
+def resolve_path_yaw_target(
+    *,
+    band_progress: float,
+    lookahead_bands: float,
+) -> float | None:
+    """Compute a yaw target that follows the path center."""
+    lookahead = max(0.0, lookahead_bands)
+    base_anchor = sample_path_center(band_progress=band_progress)
+    lookahead_anchor = sample_path_center(band_progress=band_progress + lookahead)
+    if not isinstance(base_anchor, Vec3) or not isinstance(lookahead_anchor, Vec3):
+        return None
+    direction = Vec3(
+        lookahead_anchor.x - base_anchor.x,
+        0.0,
+        lookahead_anchor.z - base_anchor.z,
+    )
+    if direction.length() <= PATH_EPSILON:
+        return None
+    return degrees(atan2(direction.x, direction.z))
+
+
+# PLR0913: explicit inputs for camera tuning and follow behavior.
+def update_camera_tracking(  # noqa: PLR0913  # pylint: disable=too-many-arguments
+    # R0913: explicit camera follow inputs.
     *,
     player: Entity,
     orbit_rig: OrbitRig,
     camera_state: CameraState,
     camera_settings: CameraSettings,
     look_velocity: Vec3,
+    band_progress: float,
+    yaw_follow_strength: float,
+    yaw_input_active: bool,
+    dt: float,
 ) -> None:
     """Update orbit camera pivots and zoom using current look input."""
     camera_state.yaw_angle, camera_state.pitch_angle = compute_look_angles(
@@ -73,6 +135,24 @@ def update_camera_tracking(
         min_pitch=camera_settings.min_pitch,
         max_pitch=camera_settings.max_pitch,
     )
+
+    if yaw_input_active:
+        camera_state.yaw_follow_angle = camera_state.yaw_angle
+    if dt > 0.0 and not yaw_input_active and yaw_follow_strength > 0.0:
+        target_yaw = resolve_path_yaw_target(
+            band_progress=band_progress,
+            lookahead_bands=camera_settings.yaw_lookahead_bands,
+        )
+        if target_yaw is not None:
+            current_yaw = camera_state.yaw_angle
+            yaw_delta = (target_yaw - current_yaw + 180.0) % 360.0 - 180.0
+            target_angle = current_yaw + yaw_delta
+            camera_state.yaw_follow_angle = lerp_exponential_decay(
+                camera_state.yaw_follow_angle,
+                target_angle,
+                dt * yaw_follow_strength,
+            )
+            camera_state.yaw_angle = camera_state.yaw_follow_angle
 
     orbit_rig.yaw_pivot.world_position = player.world_position + Vec3(
         0.0,

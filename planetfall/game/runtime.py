@@ -135,6 +135,7 @@ COIN_PATTERN_SWITCH_SECONDS = 40.0
 RANDOM_YAW_INTERVAL_SECONDS = 45.0
 RANDOM_YAW_INTERVAL_JITTER = 0.35
 RANDOM_YAW_MIN_DELTA = 25.0
+AUTO_YAW_INPUT_EPSILON = 0.02
 SCROLL_DIRECTION_BY_KEY = {
     "scroll up": 1,
     "scroll down": -1,
@@ -144,6 +145,7 @@ SCROLL_DIRECTION_BY_KEY = {
 RESTART_KEYS = {"r"}
 TOGGLE_CONTROLS_KEYS = {"u"}
 RECENTER_CAMERA_KEYS = {"c", "gamepad dpad left"}
+TOGGLE_AUTO_YAW_KEYS = {"v", "gamepad dpad right"}
 PAUSE_KEYS = {"p", "gamepad start"}
 POST_PROCESS_CYCLE_KEYS = {"t"}
 RENDER_MODE_TOGGLE_KEYS = {"y"}
@@ -525,6 +527,7 @@ def initialize_run_state(
     run_state.last_hit_time = 0.0
     run_state.coin_pattern_index = 0
     run_state.coin_pattern_started_at = monotonic()
+    run_state.auto_yaw_enabled = False
 
 
 def update_coin_pattern_timer(run_state: FallingRunState) -> None:
@@ -536,6 +539,19 @@ def update_coin_pattern_timer(run_state: FallingRunState) -> None:
     run_state.coin_pattern_index = (
         run_state.coin_pattern_index + 1
     ) % COIN_PATTERN_COUNT
+
+
+def resolve_camera_band_progress(
+    *,
+    player_y: float,
+    fall_settings: FallSettings,
+    y_offset: float,
+) -> float:
+    """Return fractional band index for smooth camera alignment."""
+    band_offset: float = (
+        fall_settings.initial_spawn_y - (player_y + y_offset)
+    ) / BAND_SPACING
+    return band_offset
 
 
 def start_next_music_track(
@@ -1040,6 +1056,7 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
         camera_state.yaw_angle = 0.0
         camera_state.pitch_angle = settings.camera.start_pitch
         camera_state.distance = settings.camera.distance
+        camera_state.yaw_follow_angle = 0.0
         apply_camera_post_process(CAMERA_POST_PROCESS_OPTIONS[post_process_index][1])
         pause_text.enabled = False
         run_state.random_yaw_target = None
@@ -1080,6 +1097,7 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
             held,
             mouse_velocity,
         )
+        yaw_input_active = abs(yaw_turn_axis) > AUTO_YAW_INPUT_EPSILON
         yaw_turn_axis = maybe_update_random_yaw(
             run_state,
             camera_state=camera_state,
@@ -1101,6 +1119,18 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
                 camera_state=camera_state,
                 camera_settings=settings.camera,
                 look_velocity=look_velocity,
+                band_progress=resolve_camera_band_progress(
+                    player_y=player.y,
+                    fall_settings=settings.fall,
+                    y_offset=settings.camera.yaw_lookahead_depth,
+                ),
+                yaw_follow_strength=(
+                    settings.camera.yaw_follow_strength
+                    if run_state.auto_yaw_enabled
+                    else 0.0
+                ),
+                yaw_input_active=yaw_input_active,
+                dt=0.0,
             )
             player.rotation_y = camera_state.yaw_angle
             return
@@ -1133,6 +1163,18 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
                 camera_state=camera_state,
                 camera_settings=settings.camera,
                 look_velocity=Vec3(0.0, 0.0, 0.0),
+                band_progress=resolve_camera_band_progress(
+                    player_y=player.y,
+                    fall_settings=settings.fall,
+                    y_offset=settings.camera.yaw_lookahead_depth,
+                ),
+                yaw_follow_strength=(
+                    settings.camera.yaw_follow_strength
+                    if run_state.auto_yaw_enabled
+                    else 0.0
+                ),
+                yaw_input_active=yaw_input_active,
+                dt=dt,
             )
             update_status_text(run_state, status_text)
             return
@@ -1223,6 +1265,18 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
             camera_state=camera_state,
             camera_settings=settings.camera,
             look_velocity=Vec3(0.0, 0.0, 0.0),
+            band_progress=resolve_camera_band_progress(
+                player_y=player.y,
+                fall_settings=settings.fall,
+                y_offset=settings.camera.yaw_lookahead_depth,
+            ),
+            yaw_follow_strength=(
+                settings.camera.yaw_follow_strength
+                if run_state.auto_yaw_enabled
+                else 0.0
+            ),
+            yaw_input_active=yaw_input_active,
+            dt=dt,
         )
         update_atmosphere_for_depth(
             player=player,
@@ -1285,6 +1339,9 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
         if key in RECENTER_CAMERA_KEYS:
             camera_state.yaw_angle = 0.0
             camera_state.pitch_angle = settings.camera.start_pitch
+
+        if key in TOGGLE_AUTO_YAW_KEYS:
+            run_state.auto_yaw_enabled = not run_state.auto_yaw_enabled
 
         scroll_direction = SCROLL_DIRECTION_BY_KEY.get(key)
         if scroll_direction is None:

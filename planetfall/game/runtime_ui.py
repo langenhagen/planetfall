@@ -33,6 +33,7 @@ def create_controls_hint() -> Text:
             "Zoom: mouse wheel / dpad up-down\n"
             "Pause: p / start\n"
             "Recenter: c / dpad left\n"
+            "Auto yaw: v / dpad right\n"
             "Post FX: t\n"
             "Render mode: y\n"
             "Restart: r\n"

@@ -36,6 +36,7 @@ uv run planetfall --help        # show command help
 - Mouse wheel: zoom in/out
 - `p`: pause/resume
 - `c`: recenter camera
+- `v`: toggle auto yaw
 - `r`: restart run
 - `u`: toggle controls hint
 
@@ -49,6 +50,7 @@ Ursina exposes standard gamepad names, so PS5 controls map as:
 - Right stick: camera look
 - D-pad up/down: zoom in/out
 - D-pad left: recenter camera
+- D-pad right: toggle auto yaw
 - Start: pause/resume
 
 ## Project Layout

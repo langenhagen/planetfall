@@ -20,6 +20,7 @@ class CameraState:
     yaw_angle: float
     pitch_angle: float
     distance: float
+    yaw_follow_angle: float = 0.0
 
 
 @dataclass(slots=True)
@@ -83,6 +84,7 @@ class FallingRunState:  # pylint: disable=too-many-instance-attributes
     coin_pattern_started_at: float = 0.0
     random_yaw_target: float | None = None
     random_yaw_next_at: float = 0.0
+    auto_yaw_enabled: bool = False
 
 
 @dataclass(frozen=True, slots=True)

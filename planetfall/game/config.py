@@ -66,6 +66,9 @@ class CameraSettings:  # pylint: disable=too-many-instance-attributes
     min_pitch: float = 22.0
     max_pitch: float = 88.0
     start_pitch: float = 82.0
+    yaw_follow_strength: float = 2.0
+    yaw_lookahead_bands: float = 3.5
+    yaw_lookahead_depth: float = -20.0
 
 
 @dataclass(frozen=True, slots=True)
