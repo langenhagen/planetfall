@@ -43,7 +43,6 @@ from .config import (
 from .runtime_audio import (
     BOOST_LOOP_FADE_SECONDS,
     BOOST_LOOP_VOLUME,
-    advance_music_playlist,
     build_music_playlist,
     play_coin_pickup_sfx,
     play_obstacle_hit_sfx,
@@ -698,6 +697,37 @@ def update_coin_pattern_timer(run_state: FallingRunState) -> None:
     run_state.coin_pattern_index += 1
 
 
+def start_next_music_track(
+    *,
+    current_track: Audio | None,
+    playlist: list[Path],
+) -> tuple[Audio | None, Path | None]:
+    """Start the next music track when none is playing."""
+    if current_track is not None and current_track.playing:
+        return current_track, None
+
+    if not playlist:
+        playlist.extend(build_music_playlist())
+        if not playlist:
+            return None, None
+
+    next_path = playlist.pop(0)
+    return start_music_track(next_path), next_path
+
+
+def resume_music_after_pause(
+    *,
+    music_state: dict[str, Audio | None],
+    music_playlist: list[Path],
+    track_path: Path | None,
+) -> tuple[Audio | None, Path | None]:
+    """Resume music playback by restarting a track."""
+    if track_path is not None:
+        return start_music_track(track_path), track_path
+
+    return start_next_music_track(current_track=None, playlist=music_playlist)
+
+
 def schedule_random_yaw(run_state: FallingRunState) -> None:
     """Schedule the next randomized camera yaw change."""
     jitter = (Random().random() - 0.5) * 2.0 * RANDOM_YAW_INTERVAL_JITTER
@@ -1158,6 +1188,7 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
     # R0913/R0914/R0915: controller glue.
     """Attach per-frame gameplay update and input handlers."""
     music_state: dict[str, Audio | None] = {"track": None}
+    music_track_path: Path | None = None
     boost_state: dict[str, Audio | None] = {"track": None}
     controller = Entity(name="fall_game_controller")
     # S311: non-crypto RNG; B311: gameplay seed.
@@ -1176,6 +1207,7 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
     boost_clip_name = resolve_boost_loop_clip()
 
     def reset_run() -> None:
+        nonlocal music_track_path
         destroy_spawned_objects(run_state.spawned_objects)
         initialize_run_state(run_state, settings.fall)
         randomizer.seed(RUN_RANDOM_SEED)
@@ -1191,6 +1223,7 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
         pause_text.enabled = False
         run_state.random_yaw_target = None
         schedule_random_yaw(run_state)
+        music_track_path = None
         if music_state["track"] is not None:
             music_state["track"].play()
         if boost_state["track"] is not None:
@@ -1219,6 +1252,7 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
 
     # C901: too-complex; per-frame flow.
     def controller_update() -> None:  # noqa: C901  # C901: complex; per-frame flow.
+        nonlocal music_track_path
         held = cast("dict[str, float]", getattr(ursina, "held_keys", {}))
         mouse_velocity = cast("Vec3", getattr(mouse, "velocity", Vec3(0.0, 0.0, 0.0)))
         x_axis, z_axis, dive_axis, yaw_turn_axis, look_velocity = compute_control_axes(
@@ -1233,7 +1267,7 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
         )
 
         if not run_state.is_paused:
-            music_state["track"] = advance_music_playlist(
+            music_state["track"], music_track_path = start_next_music_track(
                 current_track=music_state["track"],
                 playlist=music_playlist,
             )
@@ -1386,6 +1420,7 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
     def controller_input(key: str) -> None:  # noqa: C901
         # C901: complex; input branching.
         nonlocal post_process_index
+        nonlocal music_track_path
 
         if key == "escape":
             application.quit()
@@ -1413,11 +1448,15 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
         if key in PAUSE_KEYS:
             run_state.is_paused = not run_state.is_paused
             pause_text.enabled = run_state.is_paused
-            if music_state["track"] is not None:
-                if run_state.is_paused:
+            if run_state.is_paused:
+                if music_state["track"] is not None:
                     music_state["track"].pause()
-                else:
-                    music_state["track"].play()
+            else:
+                music_state["track"], music_track_path = resume_music_after_pause(
+                    music_state=music_state,
+                    music_playlist=music_playlist,
+                    track_path=music_track_path,
+                )
             return
 
         if key in RESTART_KEYS:
