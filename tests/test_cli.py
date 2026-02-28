@@ -49,6 +49,16 @@ def test_main_passes_fullscreen_setting(monkeypatch: pytest.MonkeyPatch) -> None
     CHECKER.assertEqual(captured_fullscreen_values, [True])
 
 
+def test_parse_args_accepts_fullscreen_short_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Accept -F as a fullscreen alias."""
+    monkeypatch.setattr("sys.argv", ["planetfall", "-F"])
+    parsed = cli.parse_args()
+
+    CHECKER.assertTrue(parsed.fullscreen)
+
+
 def test_main_passes_resolution_setting(monkeypatch: pytest.MonkeyPatch) -> None:
     """Forward --resolution into runtime settings."""
     captured_sizes: list[tuple[int, int] | None] = []

@@ -13,6 +13,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--fullscreen",
+        "-F",
         action="store_true",
         help="Launch the game in fullscreen mode",
     )
