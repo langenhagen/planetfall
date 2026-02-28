@@ -10,6 +10,7 @@ from planetfall.game.scene import (
     LANE_POSITIONS,
     MAX_COIN_ABS,
     OBSTACLE_MODEL_NAME,
+    OBSTACLE_PATTERN_COUNT,
     build_fall_band_blueprints,
 )
 
@@ -127,3 +128,37 @@ def test_coins_use_coin_model_asset() -> None:
         blueprint.model for blueprint in blueprints if blueprint.entity_kind == "coin"
     }
     CHECKER.assertEqual(coin_models, {COIN_MODEL_NAME})
+
+
+def test_obstacle_patterns_cover_all_variants() -> None:
+    """Exercise each obstacle pattern index at least once."""
+    seen_patterns = set()
+    for band_index in range(OBSTACLE_PATTERN_COUNT * 2):
+        blueprints = build_fall_band_blueprints(
+            band_index=band_index,
+            y_position=-120.0,
+            rng=deterministic_rng(23),
+        )
+        obstacle_names = {
+            blueprint.name
+            for blueprint in blueprints
+            if blueprint.entity_kind == "obstacle"
+        }
+        if any(name.startswith("gate_block") for name in obstacle_names):
+            seen_patterns.add("gate")
+        if any(name.startswith("slalom_block") for name in obstacle_names):
+            seen_patterns.add("slalom")
+        if any(name.startswith("chicane_row") for name in obstacle_names):
+            seen_patterns.add("chicane")
+        if any(name.startswith("ring_block") for name in obstacle_names):
+            seen_patterns.add("ring")
+        if any(name.startswith("comet_block") for name in obstacle_names):
+            seen_patterns.add("comet")
+        if any(name.startswith("checker_block") for name in obstacle_names):
+            seen_patterns.add("checker")
+        if any(name.startswith("spiral_block") for name in obstacle_names):
+            seen_patterns.add("spiral")
+    CHECKER.assertEqual(
+        seen_patterns,
+        {"gate", "slalom", "chicane", "ring", "comet", "checker", "spiral"},
+    )

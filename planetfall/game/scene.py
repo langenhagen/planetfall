@@ -24,8 +24,15 @@ HIGH_VALUE_COIN_SCORE_VALUE = 25  # Bonus coin value (halo-highlighted).
 MAX_COLLIDABLE_ABS = 6.0 * TUNNEL_WIDTH_SCALE  # Clamp for obstacle/coin placement.
 MAX_COIN_ABS = 5.0 * TUNNEL_WIDTH_SCALE  # Keep coin lanes slightly tighter.
 OBSTACLE_DENSITY_MULTIPLIER = 0.9  # Reduce asteroid count by ~10%.
+COIN_PATTERN_COUNT = 5
+OBSTACLE_PATTERN_COUNT = 7
+PATTERN_GATE = 0
+PATTERN_SLALOM = 1
 PATTERN_CHICANE = 2  # Pattern index for alternating dual-row gates.
 PATTERN_RING_GAP = 3  # Pattern index for ring obstacle with one open sector.
+PATTERN_COMET = 4
+PATTERN_CHECKER = 5
+PATTERN_SPIRAL = 6
 # Small-length guard to avoid divide-by-zero normalization.
 PATH_DIRECTION_EPSILON = 1e-4
 RING_GAP_ANGLE_THRESHOLD = 0.52  # Angular width of the safe opening in ring patterns.
@@ -69,25 +76,34 @@ def build_fall_band_blueprints(
 ) -> tuple[FallingBlueprint, ...]:
     """Build one designed band with chained coins and structured obstacles."""
     blueprints: list[FallingBlueprint] = []
-    if coin_pattern_index % 3 == 0:
+    coin_pattern = coin_pattern_index % COIN_PATTERN_COUNT
+    if coin_pattern == 0:
         blueprints.extend(
             _coin_chain_blueprints(y_position=y_position, band_index=band_index),
         )
-    elif coin_pattern_index % 3 == 1:
+    elif coin_pattern == 1:
         blueprints.extend(
             _coin_wave_blueprints(y_position=y_position, band_index=band_index),
         )
-    else:
+    elif coin_pattern == 2:
         blueprints.extend(
             _coin_fan_blueprints(y_position=y_position, band_index=band_index),
         )
+    elif coin_pattern == 3:
+        blueprints.extend(
+            _coin_ribbon_blueprints(y_position=y_position, band_index=band_index),
+        )
+    else:
+        blueprints.extend(
+            _coin_grid_blueprints(y_position=y_position, band_index=band_index),
+        )
 
-    pattern = band_index % 5
-    if pattern == 0:
+    pattern = band_index % OBSTACLE_PATTERN_COUNT
+    if pattern == PATTERN_GATE:
         blueprints.extend(
             _gate_pattern_blueprints(y_position=y_position, band_index=band_index),
         )
-    elif pattern == 1:
+    elif pattern == PATTERN_SLALOM:
         blueprints.extend(
             _slalom_pattern_blueprints(y_position=y_position, band_index=band_index),
         )
@@ -99,9 +115,20 @@ def build_fall_band_blueprints(
         blueprints.extend(
             _ring_gap_pattern_blueprints(y_position=y_position, band_index=band_index),
         )
-    else:
+    elif pattern == PATTERN_COMET:
         blueprints.extend(
             _comet_pattern_blueprints(y_position=y_position, band_index=band_index),
+        )
+    elif pattern == PATTERN_CHECKER:
+        blueprints.extend(
+            _checker_wall_pattern_blueprints(
+                y_position=y_position,
+                band_index=band_index,
+            ),
+        )
+    else:
+        blueprints.extend(
+            _spiral_pattern_blueprints(y_position=y_position, band_index=band_index),
         )
 
     if band_index % 7 == 0:
@@ -348,6 +375,66 @@ def _coin_fan_blueprints(
     return tuple(blueprints)
 
 
+def _coin_ribbon_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[FallingBlueprint, ...]:
+    center = _path_center(band_index)
+    direction = _path_direction(band_index)
+    side = Vec3(-direction.z, 0.0, direction.x)
+    blueprints: list[FallingBlueprint] = []
+    offsets = (-2, -1, 0, 1, 2)
+
+    for index, step in enumerate(offsets):
+        forward = step * (COIN_CHAIN_FORWARD_OFFSET * 0.65)
+        arc_phase = (index / max(1, len(offsets) - 1)) * tau * 0.35
+        lateral = sin(arc_phase + (band_index * 0.2)) * (COIN_CHAIN_SIDE_OFFSET * 0.7)
+        blueprints.append(
+            _coin_blueprint(
+                name=f"coin_ribbon_{index}",
+                x_pos=center.x + (direction.x * forward) + (side.x * lateral),
+                y_pos=y_position + 0.5,
+                z_pos=center.z + (direction.z * forward) + (side.z * lateral),
+            ),
+        )
+
+    return tuple(blueprints)
+
+
+def _coin_grid_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[FallingBlueprint, ...]:
+    center = _path_center(band_index)
+    direction = _path_direction(band_index)
+    side = Vec3(-direction.z, 0.0, direction.x)
+    forward_offsets = (
+        -COIN_CHAIN_FORWARD_OFFSET * 0.85,
+        COIN_CHAIN_FORWARD_OFFSET * 0.85,
+    )
+    side_offsets = (
+        -COIN_CHAIN_SIDE_OFFSET * 0.75,
+        0.0,
+        COIN_CHAIN_SIDE_OFFSET * 0.75,
+    )
+    blueprints: list[FallingBlueprint] = []
+
+    for row_index, forward in enumerate(forward_offsets):
+        for col_index, lateral in enumerate(side_offsets):
+            blueprints.append(
+                _coin_blueprint(
+                    name=f"coin_grid_{row_index}_{col_index}",
+                    x_pos=center.x + (direction.x * forward) + (side.x * lateral),
+                    y_pos=y_position + 0.45 + (row_index * 0.08),
+                    z_pos=center.z + (direction.z * forward) + (side.z * lateral),
+                ),
+            )
+
+    return tuple(blueprints)
+
+
 def _gate_pattern_blueprints(
     *,
     y_position: float,
@@ -486,6 +573,65 @@ def _comet_pattern_blueprints(
                 z_pos=sin(angle) * (5.5 * TUNNEL_WIDTH_SCALE),
                 scale=Vec3(1.8, 1.8, 1.8),
                 color_name="brown",
+            ),
+        )
+
+    return tuple(blueprints)
+
+
+def _checker_wall_pattern_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[FallingBlueprint, ...]:
+    path_center = _path_center(band_index)
+    row_a_z = _lane_snap(path_center.z + (1.8 * TUNNEL_WIDTH_SCALE))
+    row_b_z = _lane_snap(path_center.z - (1.8 * TUNNEL_WIDTH_SCALE))
+    blueprints: list[FallingBlueprint] = []
+
+    for index, lane_x in enumerate(LANE_POSITIONS):
+        if index % 2 == 0:
+            row_z = row_a_z
+            color_name = "lime"
+            suffix = "a"
+        else:
+            row_z = row_b_z
+            color_name = "turquoise"
+            suffix = "b"
+        blueprints.append(
+            _obstacle_blueprint(
+                name=f"checker_block_{suffix}_{index}",
+                x_pos=lane_x,
+                y_pos=y_position,
+                z_pos=row_z,
+                scale=Vec3(1.9, 1.9, 1.9),
+                color_name=color_name,
+            ),
+        )
+
+    return tuple(blueprints)
+
+
+def _spiral_pattern_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[FallingBlueprint, ...]:
+    base_angle = band_index * 0.32
+    base_radius = 2.8 * TUNNEL_WIDTH_SCALE
+    blueprints: list[FallingBlueprint] = []
+
+    for index in range(6):
+        angle = base_angle + (index * 0.75)
+        radius = base_radius + (index * 0.4 * TUNNEL_WIDTH_SCALE)
+        blueprints.append(
+            _obstacle_blueprint(
+                name=f"spiral_block_{index}",
+                x_pos=cos(angle) * radius,
+                y_pos=y_position,
+                z_pos=sin(angle) * radius,
+                scale=Vec3(1.7, 1.7, 1.7),
+                color_name="pink",
             ),
         )
 
