@@ -19,7 +19,7 @@ obstacles, and collects chained glowing orbs while descending.
 pyenv install -s 3.14.3
 pyenv local 3.14.3
 uv sync
-uv run planetfall  # launch the game
+uv run planetfall               # launch the game
 uv run planetfall --fullscreen  # launch the game in fullscreen mode
 uv run planetfall --help        # show command help
 ```
