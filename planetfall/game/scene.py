@@ -14,6 +14,8 @@ from planetfall.game.scene_coins import (
     coin_ribbon_blueprints,
     coin_spiral_blueprints,
     coin_wave_blueprints,
+    coin_wide_arc_blueprints,
+    coin_wide_bridge_blueprints,
     coin_zigzag_blueprints,
 )
 from planetfall.game.scene_obstacles import (
@@ -75,52 +77,59 @@ def build_fall_band_blueprints(
     """Build one designed band with chained coins and structured obstacles."""
     blueprints: list[base.FallingBlueprint] = []
     coin_pattern = coin_pattern_index % COIN_PATTERN_COUNT
-    coin_patterns: dict[
-        int,
+    # Enable/disable coin patterns by commenting/uncommenting entries.
+    # The selection rotates by index (see update_coin_pattern_timer), not random.
+    # Keep COIN_PATTERN_COUNT in scene_base.py in sync with the active list.
+    coin_pattern_builders: list[
         Callable[[float, int], tuple[base.FallingBlueprint, ...]],
-    ] = {
-        0: lambda y_pos, band: coin_chain_blueprints(
+    ] = [
+        lambda y_pos, band: coin_chain_blueprints(
             y_position=y_pos,
             band_index=band,
         ),
-        1: lambda y_pos, band: coin_wave_blueprints(
+        lambda y_pos, band: coin_wave_blueprints(
             y_position=y_pos,
             band_index=band,
         ),
-        2: lambda y_pos, band: coin_fan_blueprints(
+        lambda y_pos, band: coin_fan_blueprints(
             y_position=y_pos,
             band_index=band,
         ),
-        3: lambda y_pos, band: coin_ribbon_blueprints(
+        lambda y_pos, band: coin_ribbon_blueprints(
             y_position=y_pos,
             band_index=band,
         ),
-        4: lambda y_pos, band: coin_grid_blueprints(
+        lambda y_pos, band: coin_grid_blueprints(
             y_position=y_pos,
             band_index=band,
         ),
-        5: lambda y_pos, band: coin_orbit_blueprints(
+        lambda y_pos, band: coin_orbit_blueprints(
             y_position=y_pos,
             band_index=band,
         ),
-        6: lambda y_pos, band: coin_zigzag_blueprints(
+        lambda y_pos, band: coin_zigzag_blueprints(
             y_position=y_pos,
             band_index=band,
         ),
-        7: lambda y_pos, band: coin_spiral_blueprints(
+        lambda y_pos, band: coin_spiral_blueprints(
             y_position=y_pos,
             band_index=band,
         ),
-    }
-    if (coin_builder := coin_patterns.get(coin_pattern)) is None:
-        blueprints.extend(
-            coin_double_spiral_blueprints(
-                y_position=y_position,
-                band_index=band_index,
-            ),
-        )
-    else:
-        blueprints.extend(coin_builder(y_position, band_index))
+        lambda y_pos, band: coin_double_spiral_blueprints(
+            y_position=y_pos,
+            band_index=band,
+        ),
+        lambda y_pos, band: coin_wide_bridge_blueprints(
+            y_position=y_pos,
+            band_index=band,
+        ),
+        lambda y_pos, band: coin_wide_arc_blueprints(
+            y_position=y_pos,
+            band_index=band,
+        ),
+    ]
+    coin_builder = coin_pattern_builders[coin_pattern % len(coin_pattern_builders)]
+    blueprints.extend(coin_builder(y_position, band_index))
 
     pattern = band_index % OBSTACLE_PATTERN_COUNT
     obstacle_patterns: dict[
@@ -195,9 +204,11 @@ def _apply_coin_color_pattern(
     if not blueprints:
         return blueprints
     return [
-        replace(blueprint, color_name=color_name)
-        if blueprint.entity_kind == "coin"
-        else blueprint
+        (
+            replace(blueprint, color_name=color_name)
+            if blueprint.entity_kind == "coin"
+            else blueprint
+        )
         for blueprint in blueprints
     ]
 

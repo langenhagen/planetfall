@@ -1,14 +1,9 @@
 """Coin pattern blueprints for the falling course."""
 
 from math import cos, sin, tau
-from typing import TYPE_CHECKING
+from random import Random
 
 from planetfall.game import scene_base as base
-
-if TYPE_CHECKING:
-    from random import Random
-else:  # pragma: no cover - runtime fallback for deferred annotations.
-    Random = object
 
 
 def coin_chain_blueprints(
@@ -135,6 +130,69 @@ def coin_ribbon_blueprints(
                 x_pos=center.x + (direction.x * forward) + (side.x * lateral),
                 y_pos=y_position + 0.5,
                 z_pos=center.z + (direction.z * forward) + (side.z * lateral),
+            ),
+        )
+
+    return tuple(blueprints)
+
+
+def coin_wide_bridge_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[base.FallingBlueprint, ...]:
+    """Place a wide cross-road bridge of coins."""
+    center = base.path_center(band_index)
+    direction = base.path_direction(band_index)
+    side = base.Vec3(-direction.z, 0.0, direction.x)
+    blueprints: list[base.FallingBlueprint] = []
+
+    for index in range(20):
+        # S311: non-crypto RNG; B311: deterministic gameplay variation.
+        rng = Random((band_index * 173) + (index * 29) + 77)  # noqa: S311  # nosec B311
+        lateral = rng.uniform(-0.95, 0.95) * base.MAX_COIN_ABS
+        forward = rng.uniform(-1.4, 1.4) * base.COIN_CHAIN_FORWARD_OFFSET
+        vertical = rng.uniform(-0.2, 0.2)
+        blueprints.append(
+            base.coin_blueprint(
+                name=f"coin_wide_bridge_{index}",
+                x_pos=center.x + (side.x * lateral) + (direction.x * forward),
+                y_pos=y_position + 0.5 + vertical,
+                z_pos=center.z + (side.z * lateral) + (direction.z * forward),
+            ),
+        )
+
+    return tuple(blueprints)
+
+
+def coin_wide_arc_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[base.FallingBlueprint, ...]:
+    """Place a wide arc of coins across the tunnel."""
+    center = base.path_center(band_index)
+    direction = base.path_direction(band_index)
+    side = base.Vec3(-direction.z, 0.0, direction.x)
+    blueprints: list[base.FallingBlueprint] = []
+
+    for index in range(18):
+        # S311: non-crypto RNG; B311: deterministic gameplay variation.
+        rng = Random(  # noqa: S311  # nosec B311
+            (band_index * 197) + (index * 41) + 121,
+        )
+        lateral = rng.uniform(-1.05, 1.05) * base.MAX_COIN_ABS
+        forward = rng.uniform(-1.8, 1.8) * base.COIN_CHAIN_FORWARD_OFFSET
+        vertical = rng.uniform(-0.25, 0.25)
+        arc_bias = cos((index / 18) * tau) * (base.COIN_CHAIN_FORWARD_OFFSET * 0.45)
+        blueprints.append(
+            base.coin_blueprint(
+                name=f"coin_wide_arc_{index}",
+                x_pos=center.x + (side.x * lateral) + (direction.x * forward),
+                y_pos=y_position + 0.6 + vertical,
+                z_pos=center.z
+                + (side.z * lateral)
+                + (direction.z * (forward + arc_bias)),
             ),
         )
 
