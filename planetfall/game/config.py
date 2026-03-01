@@ -50,6 +50,11 @@ class GameplayTuningSettings:  # pylint: disable=too-many-instance-attributes
     obstacle_rock_speed_max: float = 12.0
     obstacle_spin_variants: int = 7
     obstacle_rock_variants: int = 9
+    powerup_spawn_interval_seconds: float = 18.0
+    powerup_spawn_jitter_seconds: float = 6.0
+    magnet_radius: float = 45.0
+    magnet_strength: float = 42.0
+    magnet_duration_seconds: float = 10.0
 
 
 @dataclass(frozen=True, slots=True)

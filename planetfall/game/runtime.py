@@ -40,6 +40,7 @@ from planetfall.game.runtime_audio import (
     build_music_playlist,
     play_coin_pickup_sfx,
     play_obstacle_hit_sfx,
+    play_powerup_pickup_sfx,
     resolve_boost_loop_clip,
     start_music_track,
 )
@@ -102,6 +103,8 @@ from planetfall.game.scene import (
 PLAYER_COLLISION_RADIUS = 0.95
 RUN_RANDOM_SEED = 20260224
 ASTEROID_MODEL_NAME = "models/asteroids/Asteroid_1.obj"
+POWERUP_MODEL_NAME = "icosphere"
+POWERUP_MAGNET_KIND = "magnet"
 ASTEROID_MODEL_VARIANTS: tuple[str, ...] = (
     "models/asteroids/Asteroid_1.obj",
     "models/asteroids/Rocky_Asteroid_2.obj",
@@ -130,6 +133,8 @@ ASTEROID_DIFFUSE_TEXTURE_BY_MODEL: dict[str, str] = {
         "models/asteroids/Textures_Rocky_Asteroid_6/Rocky_Asteroid_6_Diffuse_1K.png"
     ),
 }
+POWERUP_BASE_COLOR = rgba_color(1.0, 0.35, 0.9, 1.0)
+POWERUP_HALO_COLOR = rgba_color(0.95, 0.2, 0.8, 0.22)
 
 
 def rainbow_lane_rgb(lane_x: float) -> tuple[float, float, float]:
@@ -715,6 +720,81 @@ def destroy_spawned_objects(spawned_objects: list[SpawnedObject]) -> None:
     spawned_objects.clear()
 
 
+def schedule_next_powerup_spawn(
+    *,
+    run_state: FallingRunState,
+    rng: Random,
+    gameplay_settings: GameplayTuningSettings,
+    now: float,
+) -> None:
+    """Schedule the next powerup spawn time."""
+    jitter = rng.uniform(
+        -gameplay_settings.powerup_spawn_jitter_seconds,
+        gameplay_settings.powerup_spawn_jitter_seconds,
+    )
+    interval = max(4.0, gameplay_settings.powerup_spawn_interval_seconds + jitter)
+    run_state.next_powerup_spawn_at = now + interval
+
+
+# PLR0913: explicit spawn inputs.
+def spawn_powerup(  # noqa: PLR0913
+    # pylint: disable=too-many-arguments
+    # R0913: explicit spawn inputs.
+    *,
+    run_state: FallingRunState,
+    player_y: float,
+    rng: Random,
+    fall_settings: FallSettings,
+    movement_settings: MovementSettings,
+    gameplay_settings: GameplayTuningSettings,
+) -> None:
+    """Spawn a single magnet powerup ahead of the player."""
+    spawn_y = player_y - (fall_settings.spawn_ahead_distance * 0.35)
+    max_radius = movement_settings.play_area_radius * 0.6
+    spawn_x = rng.uniform(-max_radius, max_radius)
+    spawn_z = rng.uniform(-max_radius, max_radius)
+    entity_name = f"powerup_magnet_{int(spawn_y)}"
+    entity = Entity(
+        name=entity_name,
+        model=POWERUP_MODEL_NAME,
+        color=POWERUP_BASE_COLOR,
+        scale=Vec3(1.2, 1.2, 1.2),
+        position=Vec3(spawn_x, spawn_y, spawn_z),
+    )
+    entity.unlit = True
+    Entity(
+        parent=entity,
+        name=f"{entity_name}_halo",
+        model=POWERUP_MODEL_NAME,
+        scale=Vec3(1.85, 1.85, 1.85),
+        color=POWERUP_HALO_COLOR,
+        unlit=True,
+    )
+    run_state.spawned_objects.append(
+        SpawnedObject(
+            entity=entity,
+            entity_kind="powerup",
+            color_name="magnet",
+            model_name=POWERUP_MODEL_NAME,
+            collision_radius=4.0,
+            score_value=0,
+            band_index=0,
+            base_x=entity.x,
+            base_y=entity.y,
+            base_z=entity.z,
+            base_scale=Vec3(1.2, 1.2, 1.2),
+            spawn_time=monotonic(),
+            powerup_kind=POWERUP_MAGNET_KIND,
+        ),
+    )
+    schedule_next_powerup_spawn(
+        run_state=run_state,
+        rng=rng,
+        gameplay_settings=gameplay_settings,
+        now=monotonic(),
+    )
+
+
 def spawn_bands_ahead(
     *,
     run_state: FallingRunState,
@@ -747,6 +827,48 @@ def spawn_bands_ahead(
 
         run_state.next_band_index += 1
         run_state.next_band_y -= BAND_SPACING
+
+
+# PLR0913: explicit spawn inputs.
+def update_powerup_spawning(  # noqa: PLR0913
+    # pylint: disable=too-many-arguments
+    # R0913: explicit spawn inputs.
+    *,
+    run_state: FallingRunState,
+    player_y: float,
+    rng: Random,
+    fall_settings: FallSettings,
+    movement_settings: MovementSettings,
+    gameplay_settings: GameplayTuningSettings,
+    now: float,
+) -> None:
+    """Spawn powerups on an independent timer."""
+    if run_state.next_powerup_spawn_at <= 0.0:
+        schedule_next_powerup_spawn(
+            run_state=run_state,
+            rng=rng,
+            gameplay_settings=gameplay_settings,
+            now=now,
+        )
+        spawn_powerup(
+            run_state=run_state,
+            player_y=player_y,
+            rng=rng,
+            fall_settings=fall_settings,
+            movement_settings=movement_settings,
+            gameplay_settings=gameplay_settings,
+        )
+        return
+    if now < run_state.next_powerup_spawn_at:
+        return
+    spawn_powerup(
+        run_state=run_state,
+        player_y=player_y,
+        rng=rng,
+        fall_settings=fall_settings,
+        movement_settings=movement_settings,
+        gameplay_settings=gameplay_settings,
+    )
 
 
 def cleanup_passed_objects(
@@ -853,6 +975,16 @@ def process_collisions(
             )
             continue
 
+        if spawned.entity_kind == "powerup":
+            if spawned.powerup_kind == POWERUP_MAGNET_KIND:
+                run_state.magnet_expires_at = (
+                    now + gameplay_settings.magnet_duration_seconds
+                )
+                run_state.score += 5
+                play_powerup_pickup_sfx()
+            destroy_entity_tree(spawned.entity)
+            continue
+
         destroy_entity_tree(spawned.entity)
 
     run_state.spawned_objects = survivors
@@ -862,6 +994,7 @@ def process_collisions(
 def animate_spawned_objects(  # noqa: C901, PLR0912, PLR0915
     # pylint: disable=too-many-branches,too-many-locals,too-many-statements
     run_state: FallingRunState,
+    gameplay_settings: GameplayTuningSettings,
     dt: float,
     player_y: float,
     player_position: Vec3,
@@ -870,6 +1003,7 @@ def animate_spawned_objects(  # noqa: C901, PLR0912, PLR0915
     """Animate collectibles and obstacles for richer motion language."""
     runtime_time = monotonic()
     survivors: list[SpawnedObject] = []
+    magnet_active = run_state.magnet_expires_at > runtime_time
     for spawned in run_state.spawned_objects:
         if spawned.entity_kind == "coin" and spawned.is_collecting:
             collect_duration = max(0.001, spawned.collect_duration)
@@ -943,7 +1077,34 @@ def animate_spawned_objects(  # noqa: C901, PLR0912, PLR0915
 
         is_sphere_model = spawned.model_name in {"sphere", "icosphere"}
 
+        if spawned.entity_kind == "powerup":
+            spawned.entity.rotation_y += 60.0 * dt
+            pulse_scale = 1.0 + (sin(runtime_time * 3.2) * 0.08)
+            spawned.entity.scale = Vec3(
+                spawned.base_scale.x * pulse_scale,
+                spawned.base_scale.y * pulse_scale,
+                spawned.base_scale.z * pulse_scale,
+            )
+            survivors.append(spawned)
+            continue
+
         if spawned.entity_kind == "coin":
+            if magnet_active:
+                magnet_strength = gameplay_settings.magnet_strength
+                magnet_radius = gameplay_settings.magnet_radius
+                offset = player_position - spawned.entity.position
+                distance = max(0.01, offset.length())
+                if distance <= magnet_radius:
+                    pull_strength = 1.0 - (distance / magnet_radius)
+                    pull_distance = magnet_strength * pull_strength * dt
+                    pull_distance = min(pull_distance, distance)
+                    spawned.entity.position += offset.normalized() * pull_distance
+                    spawned.entity.rotation_y += 140.0 * dt
+                    spawned.entity.scale = Vec3(
+                        max(MIN_ENTITY_SCALE, spawned.base_scale.x * 1.12),
+                        max(MIN_ENTITY_SCALE, spawned.base_scale.y * 1.12),
+                        max(MIN_ENTITY_SCALE, spawned.base_scale.z * 1.12),
+                    )
             if spawned.color_name == "rainbow_wave":
                 wave_red, wave_green, wave_blue = rainbow_wave_rgb(
                     lane_x=spawned.base_x,
@@ -1292,6 +1453,16 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
 
         update_coin_pattern_timer(run_state)
 
+        update_powerup_spawning(
+            run_state=run_state,
+            player_y=player.y,
+            rng=randomizer,
+            fall_settings=settings.fall,
+            movement_settings=settings.movement,
+            gameplay_settings=settings.gameplay,
+            now=monotonic(),
+        )
+
         if boost_clip_name is not None and dive_axis > BOOST_DIVE_THRESHOLD:
             if boost_state["track"] is None or not boost_state["track"].playing:
                 audio_factory: Any = Audio
@@ -1323,7 +1494,13 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
         )
         if music_state["track"] is None and music_playlist:
             music_state["track"] = start_music_track(music_playlist.pop(0))
-        animate_spawned_objects(run_state, dt, player.y, player.position)
+        animate_spawned_objects(
+            run_state,
+            settings.gameplay,
+            dt,
+            player.y,
+            player.position,
+        )
         process_collisions(
             player=player,
             motion_state=motion_state,

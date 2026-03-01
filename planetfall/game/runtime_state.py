@@ -66,6 +66,7 @@ class SpawnedObject:  # pylint: disable=too-many-instance-attributes
     collect_started_at: float = 0.0
     collect_duration: float = 0.0
     collect_start_position: Vec3 = field(default_factory=lambda: Vec3(0.0, 0.0, 0.0))
+    powerup_kind: str | None = None
 
 
 @dataclass(slots=True)
@@ -87,6 +88,8 @@ class FallingRunState:  # pylint: disable=too-many-instance-attributes
     random_yaw_target: float | None = None
     random_yaw_next_at: float = 0.0
     auto_yaw_enabled: bool = False
+    magnet_expires_at: float = 0.0
+    next_powerup_spawn_at: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)

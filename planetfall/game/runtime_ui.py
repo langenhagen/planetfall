@@ -1,5 +1,6 @@
 """HUD and on-screen text helpers for runtime systems."""
 
+from time import monotonic
 from typing import Protocol
 
 from ursina import Text
@@ -16,6 +17,7 @@ class RunStateLike(Protocol):  # pylint: disable=too-few-public-methods
     collected_orbs: int
     deepest_y: float
     reset_count: int
+    magnet_expires_at: float
 
 
 def create_controls_hint() -> Text:
@@ -81,10 +83,15 @@ def depth_zone_label(depth: float) -> str:
 def update_status_text(run_state: RunStateLike, status_text: Text) -> None:
     """Render current score, depth, reset, and debug display status."""
     depth = max(0.0, -run_state.deepest_y)
+    magnet_remaining = max(0.0, run_state.magnet_expires_at - monotonic())
+    magnet_line = (
+        f"Magnet: {magnet_remaining:.1f}s" if magnet_remaining > 0.0 else "Magnet: --"
+    )
     status_text.text = (
         f"Score: {run_state.score}\n"
         f"Orbs: {run_state.collected_orbs}\n"
         f"Depth: {depth:.0f} m\n"
         f"Zone: {depth_zone_label(depth)}\n"
-        f"Resets: {run_state.reset_count}"
+        f"Resets: {run_state.reset_count}\n"
+        f"{magnet_line}"
     )

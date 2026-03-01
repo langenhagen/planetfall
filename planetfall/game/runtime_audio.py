@@ -13,6 +13,7 @@ from planetfall.game.runtime_assets import ASSETS_DIR
 COIN_SFX_NAMES = ("audio/sfx/345297_6212127-lq.mp3",)
 IMPACT_SFX_NAMES = ("audio/sfx/explosionCrunch_000.ogg",)
 BOOST_LOOP_SFX_NAMES = ("audio/sfx/freesound_community-loopingthrust-95548.mp3",)
+POWERUP_SFX_NAMES = ("audio/sfx/freesound_community-time-warp-effect-83543.mp3",)
 BOOST_LOOP_VOLUME = 0.7
 BOOST_LOOP_FADE_SECONDS = 0.4
 MUSIC_VOLUME = 0.6
@@ -48,6 +49,19 @@ def play_obstacle_hit_sfx() -> None:
             play_sfx_clip(clip_name=impact_path.name, volume=0.75, pitch=1.0)
             return
         play_sfx_clip(clip_name="sine", volume=1.0, pitch=1.0)
+
+
+def play_powerup_pickup_sfx() -> None:
+    """Play the configured powerup pickup sound effect."""
+    with suppress(Exception):
+        powerup_path = resolve_sfx_path(
+            preferred_names=POWERUP_SFX_NAMES,
+            fallback_pattern="*power*.*",
+        )
+        if powerup_path is not None:
+            play_sfx_clip(clip_name=powerup_path.name, volume=0.8, pitch=1.0)
+            return
+        play_sfx_clip(clip_name="sine", volume=0.9, pitch=2.0)
 
 
 def resolve_boost_loop_clip() -> str | None:

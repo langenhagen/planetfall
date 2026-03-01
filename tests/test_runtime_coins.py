@@ -91,6 +91,7 @@ def test_animate_spawned_objects_destroys_coin_after_collect_animation() -> None
     with patch("planetfall.game.runtime.monotonic", return_value=10.1):
         animate_spawned_objects(
             run_state=run_state,
+            gameplay_settings=GameplayTuningSettings(),
             dt=0.016,
             player_y=0.0,
             player_position=Vec3(0.0, 0.0, 0.0),
@@ -106,6 +107,7 @@ def test_animate_spawned_objects_destroys_coin_after_collect_animation() -> None
     ):
         animate_spawned_objects(
             run_state=run_state,
+            gameplay_settings=GameplayTuningSettings(),
             dt=0.016,
             player_y=0.0,
             player_position=Vec3(0.0, 0.0, 0.0),
