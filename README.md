@@ -60,29 +60,6 @@ Ursina exposes standard gamepad names, so PS5 controls map as:
 - `tests/`: test suite
 - `pyproject.toml`: project metadata and tool/lint configuration
 
-## Glossary
-
-- **Band**: one vertical slice of the falling course that gets spawned at a time.
-- **Blueprint**: a data-only spawn description (see `FallingBlueprint`).
-- **Coin pattern**: the coin layout used for a band (chain, wave, fan, ribbon, grid,
-  orbit, zigzag, spiral, double-spiral).
-- **Obstacle pattern**: the asteroid layout used for a band (gate, slalom, chicane,
-  ring-gap, comet, checker, spiral, orbit cluster, scatter field).
-- **Band spacing**: vertical distance between bands, used for spawn cadence.
-- **Bonus coin arc**: an extra, higher-value arc of coins injected on a cadence.
-- **Extra asteroid**: an extra asteroid injected on a cadence.
-- **Run state**: the mutable gameplay session data (`FallingRunState`).
-- **Orbit rig**: the camera pivot entity chain that orbits around the player.
-- **Yaw**: left/right camera rotation around the vertical axis.
-- **Pitch**: up/down camera tilt.
-- **Roll**: camera tilt around its forward axis.
-- **Auto yaw**: optional camera yaw follow toward the tunnel center.
-- **Play area radius**: the horizontal boundary for player movement.
-- **Spawn ahead**: the forward (downward) distance at which new bands are created.
-- **Cleanup distance**: how far above the player old entities are removed.
-- **Recovery height**: how far the player is pushed upward after an obstacle hit.
-- **Motion motes**: the subtle atmosphere streaks that scroll past while falling.
-
 ## Full Setup and Checks
 
 ```bash
@@ -136,3 +113,26 @@ scripts/capture-window.sh --name "ursina" --out __debug/screens --frames 60
 
 You can combine capture scripts with `xdotool` input automation for repeatable
 fall scenarios and visual debugging. Just saying.
+
+## Glossary
+
+- **Band**: one vertical slice of the falling course that gets spawned at a time.
+- **Blueprint**: a data-only spawn description (see `FallingBlueprint`).
+- **Coin pattern**: the coin layout used for a band (chain, wave, fan, ribbon, grid,
+  orbit, zigzag, spiral, double-spiral).
+- **Obstacle pattern**: the asteroid layout used for a band (gate, slalom, chicane,
+  ring-gap, comet, checker, spiral, orbit cluster, scatter field).
+- **Band spacing**: vertical distance between bands, used for spawn cadence.
+- **Bonus coin arc**: an extra, higher-value arc of coins injected on a cadence.
+- **Extra asteroid**: an extra asteroid injected on a cadence.
+- **Run state**: the mutable gameplay session data (`FallingRunState`).
+- **Orbit rig**: the camera pivot entity chain that orbits around the player.
+- **Yaw**: left/right camera rotation around the vertical axis.
+- **Pitch**: up/down camera tilt.
+- **Roll**: camera tilt around its forward axis.
+- **Auto yaw**: optional camera yaw follow toward the tunnel center.
+- **Play area radius**: the horizontal boundary for player movement.
+- **Spawn ahead**: the forward (downward) distance at which new bands are created.
+- **Cleanup distance**: how far above the player old entities are removed.
+- **Recovery height**: how far the player is pushed upward after an obstacle hit.
+- **Motion motes**: the subtle atmosphere streaks that scroll past while falling.
