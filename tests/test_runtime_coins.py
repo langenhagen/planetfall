@@ -39,9 +39,11 @@ def test_process_collisions_marks_coin_for_collect_animation() -> None:
     spawned_coin = SpawnedObject(
         entity=coin_entity,
         entity_kind="coin",
+        color_name="yellow",
         model_name="models/coins/coin.obj",
         collision_radius=0.7,
         score_value=10,
+        band_index=0,
         base_scale=Vec3(1.0, 1.0, 1.0),
     )
     run_state = FallingRunState(spawned_objects=[spawned_coin])
@@ -73,9 +75,11 @@ def test_animate_spawned_objects_destroys_coin_after_collect_animation() -> None
     collecting_coin = SpawnedObject(
         entity=coin_entity,
         entity_kind="coin",
+        color_name="yellow",
         model_name="models/coins/coin.obj",
         collision_radius=0.0,
         score_value=10,
+        band_index=0,
         base_scale=Vec3(1.0, 1.0, 1.0),
         is_collecting=True,
         collect_started_at=10.0,

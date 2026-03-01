@@ -62,9 +62,11 @@ def test_process_collisions_keeps_obstacle_during_hit_cooldown() -> None:
     spawned_obstacle = SpawnedObject(
         entity=obstacle_entity,
         entity_kind="obstacle",
+        color_name="gray",
         model_name="cube",
         collision_radius=1.0,
         score_value=0,
+        band_index=0,
     )
     run_state = FallingRunState(
         score=100,

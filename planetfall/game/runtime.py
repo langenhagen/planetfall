@@ -6,7 +6,7 @@
 import importlib
 from contextlib import suppress
 from functools import lru_cache
-from math import sin
+from math import sin, tau
 from pathlib import Path
 from random import Random
 from time import monotonic
@@ -94,6 +94,7 @@ from planetfall.game.scene import (
     BAND_SPACING,
     COIN_PATTERN_COUNT,
     COIN_SCORE_VALUE,
+    MAX_COIN_ABS,
     FallingBlueprint,
     build_fall_band_blueprints,
 )
@@ -129,6 +130,36 @@ ASTEROID_DIFFUSE_TEXTURE_BY_MODEL: dict[str, str] = {
         "models/asteroids/Textures_Rocky_Asteroid_6/Rocky_Asteroid_6_Diffuse_1K.png"
     ),
 }
+
+
+def rainbow_lane_rgb(lane_x: float) -> tuple[float, float, float]:
+    """Return a bright rainbow color based on lateral lane position."""
+    lane_span = max(0.01, MAX_COIN_ABS)
+    clamped_x = max(-lane_span, min(lane_span, lane_x))
+    phase = (clamped_x + lane_span) / (lane_span * 2.0)
+    red = 0.5 + (0.5 * sin((tau * phase) + 0.0))
+    green = 0.5 + (0.5 * sin((tau * phase) + 2.094))
+    blue = 0.5 + (0.5 * sin((tau * phase) + 4.188))
+    return red, green, blue
+
+
+def rainbow_wave_rgb(
+    *,
+    lane_x: float,
+    band_index: int,
+    runtime_time: float,
+) -> tuple[float, float, float]:
+    """Return a rainbow color that ripples along the road."""
+    lane_span = max(0.01, MAX_COIN_ABS)
+    clamped_x = max(-lane_span, min(lane_span, lane_x))
+    lane_phase = (clamped_x + lane_span) / (lane_span * 2.0)
+    wave_phase = (band_index * 0.18) + (lane_phase * 1.6) + (runtime_time * 0.6)
+    red = 0.5 + (0.5 * sin((tau * wave_phase) + 0.0))
+    green = 0.5 + (0.5 * sin((tau * wave_phase) + 2.094))
+    blue = 0.5 + (0.5 * sin((tau * wave_phase) + 4.188))
+    return red, green, blue
+
+
 ASTEROID_SCALE_MIN = 0.6
 ASTEROID_SCALE_MAX = 2.5
 COIN_PATTERN_SWITCH_SECONDS = 40.0
@@ -301,9 +332,12 @@ def update_player_visual_state(
         )
 
 
-# C901: too-complex; PLR0915: too-many-statements.
-def spawn_entity_from_blueprint(  # noqa: C901, PLR0915
-    # pylint: disable=too-many-locals,too-many-statements
+# C901: too-complex; PLR0912: many branches; PLR0915: too-many-statements.
+def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
+    # pylint: disable=too-many-branches,too-many-locals,too-many-statements
+    # R0912: branching follows entity kind and variant setup.
+    # R0914: locals keep spawn tuning explicit per entity.
+    # R0915: setup stages are intentionally verbose for clarity.
     *,
     blueprint: FallingBlueprint,
     band_index: int,
@@ -357,21 +391,45 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0915
         mark_lit_shadowed(entity)
         entity.unlit = False
         entity.texture = None
-        target_color = rgba_color(1.0, 0.92, 0.22, 1.0)
+        if blueprint.color_name == "rainbow":
+            rainbow_red, rainbow_green, rainbow_blue = rainbow_lane_rgb(
+                blueprint.position.x,
+            )
+        elif blueprint.color_name == "rainbow_wave":
+            rainbow_red, rainbow_green, rainbow_blue = rainbow_wave_rgb(
+                lane_x=blueprint.position.x,
+                band_index=band_index,
+                runtime_time=monotonic(),
+            )
+        else:
+            rainbow_red = 1.0
+            rainbow_green = 0.92
+            rainbow_blue = 0.22
+        target_color = rgba_color(rainbow_red, rainbow_green, rainbow_blue, 1.0)
         is_high_value_coin = blueprint.score_value > COIN_SCORE_VALUE
         should_render_coin_halo = deterministic_probability_hit(
             seed=variation_seed + 13,
             probability=gameplay_settings.high_value_coin_halo_chance,
         )
         if is_high_value_coin:
-            target_color = rgba_color(1.0, 0.84, 0.18, 1.0)
+            target_color = rgba_color(
+                min(1.0, rainbow_red * 1.08),
+                min(1.0, rainbow_green * 1.08),
+                min(1.0, rainbow_blue * 1.08),
+                1.0,
+            )
             if should_render_coin_halo:
                 Entity(
                     parent=entity,
                     name=f"{entity_name}_coin_halo",
                     model=spawn_model,
                     scale=Vec3(1.18, 1.18, 1.18),
-                    color=rgba_color(1.0, 0.92, 0.3, 0.18),
+                    color=rgba_color(
+                        min(1.0, rainbow_red * 1.1),
+                        min(1.0, rainbow_green * 1.1),
+                        min(1.0, rainbow_blue * 1.1),
+                        0.18,
+                    ),
                     unlit=True,
                 )
         spin_speed_x = 0.0
@@ -462,9 +520,11 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0915
     return SpawnedObject(
         entity=entity,
         entity_kind=blueprint.entity_kind,
+        color_name=blueprint.color_name,
         model_name=spawn_model,
         collision_radius=blueprint.collision_radius,
         score_value=blueprint.score_value,
+        band_index=band_index,
         spin_speed_x=spin_speed_x,
         spin_speed_y=spin_speed_y,
         spin_speed_z=spin_speed_z,
@@ -884,6 +944,24 @@ def animate_spawned_objects(  # noqa: C901, PLR0912, PLR0915
         is_sphere_model = spawned.model_name in {"sphere", "icosphere"}
 
         if spawned.entity_kind == "coin":
+            if spawned.color_name == "rainbow_wave":
+                wave_red, wave_green, wave_blue = rainbow_wave_rgb(
+                    lane_x=spawned.base_x,
+                    band_index=spawned.band_index,
+                    runtime_time=runtime_time,
+                )
+                spawned.target_rgba = (
+                    wave_red,
+                    wave_green,
+                    wave_blue,
+                    spawned.target_rgba[3],
+                )
+                spawned.entity.color = rgba_color(
+                    wave_red,
+                    wave_green,
+                    wave_blue,
+                    spawned.entity.color.a,
+                )
             if not is_sphere_model:
                 spawned.entity.rotation_y += spawned.spin_speed_y * dt
             if spawned.bob_amplitude > 0.0:

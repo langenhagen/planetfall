@@ -39,9 +39,11 @@ class SpawnedObject:  # pylint: disable=too-many-instance-attributes
 
     entity: Entity
     entity_kind: str
+    color_name: str
     model_name: str
     collision_radius: float
     score_value: int
+    band_index: int
     spin_speed_x: float = 0.0
     spin_speed_y: float = 0.0
     spin_speed_z: float = 0.0

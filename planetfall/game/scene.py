@@ -1,5 +1,6 @@
 """Procedural blueprint helpers for the endless falling course."""
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from planetfall.game import scene_base as base
@@ -175,12 +176,30 @@ def build_fall_band_blueprints(
             ),
         )
 
+    coin_color_cycle = ("yellow", "rainbow", "rainbow_wave")
+    coin_color = coin_color_cycle[coin_pattern % len(coin_color_cycle)]
+    blueprints = _apply_coin_color_pattern(blueprints, coin_color)
+
     if band_index % 4 == 0:
         blueprints.extend(
             extra_asteroid_blueprints(y_position=y_position, band_index=band_index),
         )
 
     return tuple(_apply_obstacle_density(blueprints, rng))
+
+
+def _apply_coin_color_pattern(
+    blueprints: list[base.FallingBlueprint],
+    color_name: str,
+) -> list[base.FallingBlueprint]:
+    if not blueprints:
+        return blueprints
+    return [
+        replace(blueprint, color_name=color_name)
+        if blueprint.entity_kind == "coin"
+        else blueprint
+        for blueprint in blueprints
+    ]
 
 
 def _apply_obstacle_density(
