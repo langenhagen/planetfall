@@ -116,11 +116,12 @@ scripts/capture-window.sh --name "ursina" --out __debug/screens --frames 60
 You can combine capture scripts with `xdotool` input automation for repeatable
 fall scenarios and visual debugging. Just saying.
 
-## Audio Conversion Scripts
+## Asset Conversion Scripts
 
-The project uses WAV files for audio effects and OGG files for longer audio.
-We have scripts that aid the conversion from other formats.
+The project uses specific file formats for its assets. Convert your audio and images
+with following scripts:
 
+- [scripts/convert-assets.sh](scripts/convert-assets.sh): run all asset converters in one pass.
 - [scripts/convert-audio-sfx-to-wav.sh](scripts/convert-audio-sfx-to-wav.sh): convert SFX under
   [`assets/audio/sfx/`](assets/audio/sfx/).
 - [scripts/convert-audio-background-music-to-ogg.sh](scripts/convert-audio-background-music-to-ogg.sh):
