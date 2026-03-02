@@ -58,6 +58,10 @@ class SpawnedObject:  # pylint: disable=too-many-instance-attributes
     drift_speed_z: float = 0.0
     drift_progress: float = 0.0
     drift_blend: float = 0.0
+    motion_kind: str = ""
+    motion_amplitude: float = 0.0
+    motion_frequency: float = 0.0
+    motion_phase: float = 0.0
     base_scale: Vec3 = field(default_factory=lambda: Vec3(1.0, 1.0, 1.0))
     spawn_time: float = 0.0
     fade_duration: float = 0.0

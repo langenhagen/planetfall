@@ -6,7 +6,7 @@
 import importlib
 from contextlib import suppress
 from functools import lru_cache
-from math import sin, tau
+from math import cos, sin, tau
 from pathlib import Path
 from random import Random
 from time import monotonic
@@ -544,6 +544,10 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
         drift_speed_z=drift_speed_z,
         drift_progress=0.0,
         base_scale=base_scale,
+        motion_kind=blueprint.motion_kind,
+        motion_amplitude=blueprint.motion_amplitude,
+        motion_frequency=blueprint.motion_frequency,
+        motion_phase=blueprint.motion_phase,
         spawn_time=monotonic(),
         fade_duration=fade_duration,
         target_rgba=target_rgba,
@@ -1108,6 +1112,35 @@ def animate_spawned_objects(  # noqa: C901, PLR0912, PLR0915
                         max(MIN_ENTITY_SCALE, spawned.base_scale.y * 1.12),
                         max(MIN_ENTITY_SCALE, spawned.base_scale.z * 1.12),
                     )
+            if spawned.motion_kind and not spawned.is_collecting:
+                if spawned.motion_kind == "lane_wave":
+                    sway = sin(
+                        (runtime_time * spawned.motion_frequency)
+                        + spawned.motion_phase,
+                    )
+                    spawned.entity.x = spawned.base_x + (
+                        sway * spawned.motion_amplitude
+                    )
+                elif spawned.motion_kind == "lane_orbit":
+                    orbit_phase = (
+                        runtime_time * spawned.motion_frequency
+                    ) + spawned.motion_phase
+                    spawned.entity.x = spawned.base_x + (
+                        cos(orbit_phase) * spawned.motion_amplitude
+                    )
+                    spawned.entity.z = spawned.base_z + (
+                        sin(orbit_phase) * spawned.motion_amplitude
+                    )
+                elif spawned.motion_kind == "lane_slalom":
+                    slalom_phase = (
+                        runtime_time * spawned.motion_frequency
+                    ) + spawned.motion_phase
+                    sway = sin(slalom_phase)
+                    lift = cos(slalom_phase) * (spawned.motion_amplitude * 0.18)
+                    spawned.entity.x = spawned.base_x + (
+                        sway * spawned.motion_amplitude
+                    )
+                    spawned.entity.y = spawned.base_y + lift
             if spawned.color_name == "rainbow_wave":
                 wave_red, wave_green, wave_blue = rainbow_wave_rgb(
                     lane_x=spawned.base_x,

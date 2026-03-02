@@ -12,6 +12,9 @@ from planetfall.game.scene_coins import (
     coin_grid_blueprints,
     coin_orbit_blueprints,
     coin_ribbon_blueprints,
+    coin_road_orbit_blueprints,
+    coin_road_slalom_blueprints,
+    coin_road_wave_blueprints,
     coin_spiral_blueprints,
     coin_wave_blueprints,
     coin_wide_arc_blueprints,
@@ -83,6 +86,22 @@ def build_fall_band_blueprints(
     coin_pattern_builders: list[
         Callable[[float, int], tuple[base.FallingBlueprint, ...]],
     ] = [
+        lambda y_pos, band: coin_chain_blueprints(
+            y_position=y_pos,
+            band_index=band,
+        ),
+        lambda y_pos, band: coin_road_wave_blueprints(
+            y_position=y_pos,
+            band_index=band,
+        ),
+        lambda y_pos, band: coin_road_orbit_blueprints(
+            y_position=y_pos,
+            band_index=band,
+        ),
+        lambda y_pos, band: coin_road_slalom_blueprints(
+            y_position=y_pos,
+            band_index=band,
+        ),
         lambda y_pos, band: coin_chain_blueprints(
             y_position=y_pos,
             band_index=band,

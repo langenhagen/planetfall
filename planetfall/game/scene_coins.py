@@ -50,6 +50,94 @@ def coin_chain_blueprints(
     return tuple(blueprints)
 
 
+def coin_road_wave_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[base.FallingBlueprint, ...]:
+    """Place a wave that moves across the full road width."""
+    center = base.path_center(band_index)
+    direction = base.path_direction(band_index)
+    side = base.Vec3(-direction.z, 0.0, direction.x)
+    blueprints: list[base.FallingBlueprint] = []
+
+    for index, lane in enumerate(base.LANE_POSITIONS):
+        forward = (index - 2) * (base.COIN_CHAIN_FORWARD_OFFSET * 0.55)
+        phase = base.lane_phase_value(band_index, lane) + (index * 0.25)
+        blueprints.append(
+            base.coin_blueprint(
+                name=f"coin_road_wave_{index}",
+                x_pos=center.x + (side.x * lane) + (direction.x * forward),
+                y_pos=y_position + 0.5,
+                z_pos=center.z + (side.z * lane) + (direction.z * forward),
+                motion_kind="lane_wave",
+                motion_amplitude=base.COIN_CHAIN_SIDE_OFFSET * 0.75,
+                motion_frequency=1.15,
+                motion_phase=phase,
+            ),
+        )
+
+    return tuple(blueprints)
+
+
+def coin_road_orbit_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[base.FallingBlueprint, ...]:
+    """Place a slow orbiting sweep along the road centerline."""
+    center = base.path_center(band_index)
+    direction = base.path_direction(band_index)
+    blueprints: list[base.FallingBlueprint] = []
+
+    for index in range(7):
+        forward = (index - 3) * (base.COIN_CHAIN_FORWARD_OFFSET * 0.55)
+        phase = base.lane_phase_value(band_index, 0.0) + (index * 0.38)
+        blueprints.append(
+            base.coin_blueprint(
+                name=f"coin_road_orbit_{index}",
+                x_pos=center.x + (direction.x * forward),
+                y_pos=y_position + 0.5,
+                z_pos=center.z + (direction.z * forward),
+                motion_kind="lane_orbit",
+                motion_amplitude=base.COIN_CHAIN_SIDE_OFFSET * 1.15,
+                motion_frequency=0.85,
+                motion_phase=phase,
+            ),
+        )
+
+    return tuple(blueprints)
+
+
+def coin_road_slalom_blueprints(
+    *,
+    y_position: float,
+    band_index: int,
+) -> tuple[base.FallingBlueprint, ...]:
+    """Place a slalom that snakes across the road and lifts."""
+    center = base.path_center(band_index)
+    direction = base.path_direction(band_index)
+    blueprints: list[base.FallingBlueprint] = []
+
+    for index in range(9):
+        forward = (index - 4) * (base.COIN_CHAIN_FORWARD_OFFSET * 0.5)
+        phase = base.lane_phase_value(band_index, 0.0) + (index * 0.42)
+        blueprints.append(
+            base.coin_blueprint(
+                name=f"coin_road_slalom_{index}",
+                x_pos=center.x + (direction.x * forward),
+                y_pos=y_position + 0.5,
+                z_pos=center.z + (direction.z * forward),
+                motion_kind="lane_slalom",
+                motion_amplitude=base.COIN_CHAIN_SIDE_OFFSET * 1.25,
+                motion_frequency=1.05,
+                motion_phase=phase,
+            ),
+        )
+
+    return tuple(blueprints)
+
+
 def coin_wave_blueprints(
     *,
     y_position: float,

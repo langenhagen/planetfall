@@ -18,7 +18,7 @@ HIGH_VALUE_COIN_SCORE_VALUE = 25  # Bonus coin value (halo-highlighted).
 MAX_COLLIDABLE_ABS = 6.0 * TUNNEL_WIDTH_SCALE  # Clamp for obstacle/coin placement.
 MAX_COIN_ABS = 5.0 * TUNNEL_WIDTH_SCALE  # Keep coin lanes slightly tighter.
 OBSTACLE_DENSITY_MULTIPLIER = 0.9  # Reduce asteroid count by ~10%.
-COIN_PATTERN_COUNT = 11
+COIN_PATTERN_COUNT = 14
 OBSTACLE_PATTERN_COUNT = 9
 PATTERN_GATE = 0
 PATTERN_SLALOM = 1
@@ -61,6 +61,10 @@ class FallingBlueprint:  # pylint: disable=too-many-instance-attributes
     position: Vec3
     collision_radius: float = 0.0
     score_value: int = 0
+    motion_kind: str = ""
+    motion_amplitude: float = 0.0
+    motion_frequency: float = 0.0
+    motion_phase: float = 0.0
 
 
 @lru_cache(maxsize=1024)
@@ -82,6 +86,15 @@ def path_direction(band_index: int) -> Vec3:
     if length <= PATH_DIRECTION_EPSILON:
         return Vec3(1.0, 0.0, 0.0)
     return Vec3(delta_x / length, 0.0, delta_z / length)
+
+
+def lane_phase_value(band_index: int, lane_x: float) -> float:
+    """Return a stable phase offset for band/lane motion."""
+    lane_index = min(
+        range(len(LANE_POSITIONS)),
+        key=lambda index: abs(LANE_POSITIONS[index] - lane_x),
+    )
+    return (band_index * 0.35) + (lane_index * 0.6)
 
 
 def lane_snap(value: float) -> float:
@@ -141,6 +154,10 @@ def coin_blueprint(  # noqa: PLR0913
     z_pos: float,
     score_value: int = COIN_SCORE_VALUE,
     color_name: str = "yellow",
+    motion_kind: str = "",
+    motion_amplitude: float = 0.0,
+    motion_frequency: float = 0.0,
+    motion_phase: float = 0.0,
 ) -> FallingBlueprint:
     """Create a blueprint for a coin entity."""
     # R0913: explicit placement inputs.
@@ -157,4 +174,8 @@ def coin_blueprint(  # noqa: PLR0913
         ),
         collision_radius=2.5,
         score_value=score_value,
+        motion_kind=motion_kind,
+        motion_amplitude=motion_amplitude,
+        motion_frequency=motion_frequency,
+        motion_phase=motion_phase,
     )
