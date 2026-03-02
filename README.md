@@ -55,10 +55,10 @@ Ursina exposes standard gamepad names, so PS5 controls map as:
 
 ## Project Layout
 
-- `planetfall/`: application package and CLI entrypoint
-- `planetfall/game/`: runtime, control logic, procedural falling-scene generation
-- `tests/`: test suite
-- `pyproject.toml`: project metadata and tool/lint configuration
+- [`pyproject.toml`](pyproject.toml): project metadata and tool/lint configuration
+- [`planetfall/`](planetfall/): application package and CLI entrypoint
+- [`planetfall/game/`](planetfall/game/): runtime, control logic, procedural falling-scene generation
+- [`tests/`](tests/): test suite
 
 ## Full Setup and Checks
 
@@ -88,10 +88,12 @@ uv run pre-commit run --all-files
 
 ## Debug Capture Scripts
 
-- `scripts/capture-window.sh`: generic X11 window screenshot capture tool.
+Tooling that helps automating AI-testing and debugging of the game.
+
+- [`scripts/capture-window.sh`](scripts/capture-window.sh): generic X11 window screenshot capture tool.
   - Capture any window by name or id at a fixed interval.
   - Outputs numbered+timestamped frames to a target directory.
-- `scripts/capture-game.sh`: game-focused wrapper around `capture-window.sh`.
+- [`scripts/capture-game.sh`](scripts/capture-game.sh): game-focused wrapper around `capture-window.sh`.
   - Targets `ursina` window names automatically.
   - Writes to `__debug/drive_run_YYYY-MM-DD-HH-MM-SS/` with:
     - `screens/` (captured frames)
@@ -116,12 +118,17 @@ fall scenarios and visual debugging. Just saying.
 
 ## Audio Conversion Scripts
 
+The project uses WAV files for audio effects and OGG files for longer audio.
+We have scripts that aid the conversion from other formats.
+
 - [scripts/convert-audio-sfx-to-wav.sh](scripts/convert-audio-sfx-to-wav.sh): convert SFX under
-  `assets/audio/sfx/`.
+  [`assets/audio/sfx/`](assets/audio/sfx/).
 - [scripts/convert-audio-background-music-to-ogg.sh](scripts/convert-audio-background-music-to-ogg.sh):
-  convert music under `assets/audio/music/`.
+  convert music under [`assets/audio/music/`](assets/audio/music/).
 
 ## Glossary
+
+Terms used in the game and its code.
 
 - **Band**: one vertical slice of the falling course that gets spawned at a time.
 - **Blueprint**: a data-only spawn description (see `FallingBlueprint`).
