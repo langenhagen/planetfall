@@ -167,7 +167,7 @@ def rainbow_wave_rgb(
 
 ASTEROID_SCALE_MIN = 0.6
 ASTEROID_SCALE_MAX = 2.5
-COIN_PATTERN_SWITCH_SECONDS = 40.0
+COIN_PATTERN_SWITCH_METERS = 1200.0
 RANDOM_YAW_INTERVAL_SECONDS = 45.0
 RANDOM_YAW_INTERVAL_JITTER = 0.35
 RANDOM_YAW_MIN_DELTA = 25.0
@@ -591,16 +591,19 @@ def initialize_run_state(
     run_state.next_band_y = fall_settings.initial_spawn_y
     run_state.last_hit_time = 0.0
     run_state.coin_pattern_index = 0
-    run_state.coin_pattern_started_at = monotonic()
+    run_state.coin_pattern_start_y = fall_settings.initial_spawn_y
     run_state.auto_yaw_enabled = False
 
 
-def update_coin_pattern_timer(run_state: FallingRunState) -> None:
-    """Advance the active coin pattern on a fixed interval."""
-    now = monotonic()
-    if now - run_state.coin_pattern_started_at < COIN_PATTERN_SWITCH_SECONDS:
+def update_coin_pattern_timer(
+    run_state: FallingRunState,
+    *,
+    player_y: float,
+) -> None:
+    """Advance the active coin pattern based on distance fallen."""
+    if (run_state.coin_pattern_start_y - player_y) < COIN_PATTERN_SWITCH_METERS:
         return
-    run_state.coin_pattern_started_at = now
+    run_state.coin_pattern_start_y = player_y
     run_state.coin_pattern_index = (
         run_state.coin_pattern_index + 1
     ) % COIN_PATTERN_COUNT
@@ -1451,7 +1454,7 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
         )
         run_state.deepest_y = min(run_state.deepest_y, player.y)
 
-        update_coin_pattern_timer(run_state)
+        update_coin_pattern_timer(run_state, player_y=player.y)
 
         update_powerup_spawning(
             run_state=run_state,

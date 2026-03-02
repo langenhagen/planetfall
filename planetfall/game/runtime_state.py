@@ -84,7 +84,7 @@ class FallingRunState:  # pylint: disable=too-many-instance-attributes
     last_hit_time: float = 0.0
     spawned_objects: list[SpawnedObject] = field(default_factory=list)
     coin_pattern_index: int = 0
-    coin_pattern_started_at: float = 0.0
+    coin_pattern_start_y: float = 0.0
     random_yaw_target: float | None = None
     random_yaw_next_at: float = 0.0
     auto_yaw_enabled: bool = False
