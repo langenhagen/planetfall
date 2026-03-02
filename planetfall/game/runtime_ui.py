@@ -14,7 +14,7 @@ class RunStateLike(Protocol):  # pylint: disable=too-few-public-methods
     """Minimal run-state shape required by HUD rendering."""
 
     score: int
-    collected_orbs: int
+    collected_coins: int
     deepest_y: float
     reset_count: int
     magnet_expires_at: float
@@ -89,7 +89,7 @@ def update_status_text(run_state: RunStateLike, status_text: Text) -> None:
     )
     status_text.text = (
         f"Score: {run_state.score}\n"
-        f"Orbs: {run_state.collected_orbs}\n"
+        f"Coins: {run_state.collected_coins}\n"
         f"Depth: {depth:.0f} m\n"
         f"Zone: {depth_zone_label(depth)}\n"
         f"Resets: {run_state.reset_count}\n"

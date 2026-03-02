@@ -4,7 +4,7 @@ A largely vibe coded third-person endless falling game built with Ursina and Pyt
 similar to the memorable parts from LEGO City Undercover.
 
 The player dives from deep space toward a distant planet, steers around
-obstacles, and collects chained glowing orbs while descending.
+obstacles, and collects chained glowing coins while descending.
 
 ![](res/screenshot.webp)
 

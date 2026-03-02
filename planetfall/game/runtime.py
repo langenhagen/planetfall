@@ -587,7 +587,7 @@ def initialize_run_state(
 ) -> None:
     """Reset run-state values to initial defaults."""
     run_state.score = 0
-    run_state.collected_orbs = 0
+    run_state.collected_coins = 0
     run_state.reset_count = 0
     run_state.is_paused = False
     run_state.deepest_y = 0.0
@@ -952,7 +952,7 @@ def process_collisions(
                 spawned.entity.position.z,
             )
             spawned.collision_radius = 0.0
-            run_state.collected_orbs += 1
+            run_state.collected_coins += 1
             run_state.score += spawned.score_value
             play_coin_pickup_sfx()
             survivors.append(spawned)

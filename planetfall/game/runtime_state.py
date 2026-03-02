@@ -79,7 +79,7 @@ class FallingRunState:  # pylint: disable=too-many-instance-attributes
     """Mutable run-state values tracked across gameplay frames."""
 
     score: int = 0
-    collected_orbs: int = 0
+    collected_coins: int = 0
     reset_count: int = 0
     deepest_y: float = 0.0
     is_paused: bool = False

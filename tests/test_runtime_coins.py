@@ -62,7 +62,7 @@ def test_process_collisions_marks_coin_for_collect_animation() -> None:
 
     CHECKER.assertFalse(destroy_mock.called)
     CHECKER.assertTrue(sfx_mock.called)
-    CHECKER.assertEqual(run_state.collected_orbs, 1)
+    CHECKER.assertEqual(run_state.collected_coins, 1)
     CHECKER.assertEqual(run_state.score, 10)
     CHECKER.assertEqual(len(run_state.spawned_objects), 1)
     CHECKER.assertTrue(run_state.spawned_objects[0].is_collecting)
