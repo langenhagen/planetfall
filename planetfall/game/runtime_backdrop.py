@@ -128,7 +128,7 @@ def resolve_space_sky_texture_paths() -> tuple[Path, ...]:
     """Resolve all available sky textures for timed cross-fade cycling."""
     resolved: list[Path] = []
 
-    for extension in ("*.png", "*.jpg", "*.jpeg", "*.exr"):
+    for extension in ("*.txo",):
         resolved.extend(
             sorted(
                 Path(path)

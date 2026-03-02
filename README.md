@@ -125,6 +125,8 @@ We have scripts that aid the conversion from other formats.
   [`assets/audio/sfx/`](assets/audio/sfx/).
 - [scripts/convert-audio-background-music-to-ogg.sh](scripts/convert-audio-background-music-to-ogg.sh):
   convert music under [`assets/audio/music/`](assets/audio/music/).
+- [scripts/convert-skyboxes-to-txo.py](scripts/convert-skyboxes-to-txo.py): convert skybox textures
+  under [`assets/sky/`](assets/sky/).
 
 ## Glossary
 
