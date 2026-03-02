@@ -10,10 +10,10 @@ from ursina import Audio
 
 from planetfall.game.runtime_assets import ASSETS_DIR
 
-COIN_SFX_NAMES = ("audio/sfx/345297_6212127-lq.mp3",)
-IMPACT_SFX_NAMES = ("audio/sfx/explosionCrunch_000.ogg",)
-BOOST_LOOP_SFX_NAMES = ("audio/sfx/freesound_community-loopingthrust-95548.mp3",)
-POWERUP_SFX_NAMES = ("audio/sfx/freesound_community-time-warp-effect-83543.mp3",)
+COIN_SFX_NAMES = ("audio/sfx/345297_6212127-lq.wav",)
+IMPACT_SFX_NAMES = ("audio/sfx/explosionCrunch_000.wav",)
+BOOST_LOOP_SFX_NAMES = ("audio/sfx/freesound_community-loopingthrust-95548.wav",)
+POWERUP_SFX_NAMES = ("audio/sfx/freesound_community-time-warp-effect-83543.wav",)
 BOOST_LOOP_VOLUME = 0.7
 BOOST_LOOP_FADE_SECONDS = 0.4
 MUSIC_VOLUME = 0.6
@@ -30,7 +30,7 @@ def play_coin_pickup_sfx() -> None:
     with suppress(Exception):
         coin_path = resolve_sfx_path(
             preferred_names=COIN_SFX_NAMES,
-            fallback_pattern="coin*.ogg",
+            fallback_pattern="coin*.wav",
         )
         if coin_path is not None:
             play_sfx_clip(clip_name=coin_path.name, volume=0.7, pitch=1.0)
@@ -43,7 +43,7 @@ def play_obstacle_hit_sfx() -> None:
     with suppress(Exception):
         impact_path = resolve_sfx_path(
             preferred_names=IMPACT_SFX_NAMES,
-            fallback_pattern="*impact*.ogg",
+            fallback_pattern="*impact*.wav",
         )
         if impact_path is not None:
             play_sfx_clip(clip_name=impact_path.name, volume=0.75, pitch=1.0)
@@ -56,7 +56,7 @@ def play_powerup_pickup_sfx() -> None:
     with suppress(Exception):
         powerup_path = resolve_sfx_path(
             preferred_names=POWERUP_SFX_NAMES,
-            fallback_pattern="*power*.*",
+            fallback_pattern="*power*.wav",
         )
         if powerup_path is not None:
             play_sfx_clip(clip_name=powerup_path.name, volume=0.8, pitch=1.0)
@@ -69,7 +69,7 @@ def resolve_boost_loop_clip() -> str | None:
     with suppress(Exception):
         boost_path = resolve_sfx_path(
             preferred_names=BOOST_LOOP_SFX_NAMES,
-            fallback_pattern="*thrust*.*",
+            fallback_pattern="*thrust*.wav",
         )
         if boost_path is not None:
             return boost_path.name
@@ -102,7 +102,7 @@ def resolve_music_paths() -> tuple[Path, ...]:
     if not music_dir.exists():
         return ()
     return tuple(
-        sorted(Path(path) for path in music_dir.glob("*.mp3") if path.is_file()),
+        sorted(Path(path) for path in music_dir.glob("*.ogg") if path.is_file()),
     )
 
 

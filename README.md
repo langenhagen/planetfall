@@ -114,6 +114,13 @@ scripts/capture-window.sh --name "ursina" --out __debug/screens --frames 60
 You can combine capture scripts with `xdotool` input automation for repeatable
 fall scenarios and visual debugging. Just saying.
 
+## Audio Conversion Scripts
+
+- [scripts/convert-audio-sfx-to-wav.sh](scripts/convert-audio-sfx-to-wav.sh): convert SFX under
+  `assets/audio/sfx/`.
+- [scripts/convert-audio-background-music-to-ogg.sh](scripts/convert-audio-background-music-to-ogg.sh):
+  convert music under `assets/audio/music/`.
+
 ## Glossary
 
 - **Band**: one vertical slice of the falling course that gets spawned at a time.
