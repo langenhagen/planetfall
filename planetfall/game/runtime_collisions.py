@@ -31,7 +31,6 @@ if TYPE_CHECKING:
 PLAYER_COLLISION_RADIUS = 0.95
 COIN_COLLECT_ANIMATION_SECONDS = 0.18
 POWERUP_MAGNET_KIND = "magnet"
-NUMPY_COLLISION_BATCH_MIN = 80
 
 
 @dataclass(slots=True)
@@ -160,22 +159,11 @@ def _should_handle_collision(
     *,
     spawned: SpawnedObject,
     index: int,
-    hits: NDArray[np.bool_] | None,
-    player: Entity,
+    hits: NDArray[np.bool_],
 ) -> bool:
     if spawned.collision_radius <= 0.0:
         return False
-    if hits is not None:
-        return bool(hits[index])
-
-    hit_radius = PLAYER_COLLISION_RADIUS + spawned.collision_radius
-    delta_y = spawned.entity.y - player.y
-    if abs(delta_y) > hit_radius:
-        return False
-
-    delta = spawned.entity.position - player.position
-    distance_squared = (delta.x * delta.x) + (delta.y * delta.y) + (delta.z * delta.z)
-    return bool(distance_squared <= (hit_radius * hit_radius))
+    return bool(hits[index])
 
 
 def process_collisions(
@@ -198,20 +186,21 @@ def process_collisions(
     )
     survivors: list[SpawnedObject] = []
     spawned_objects = run_state.spawned_objects
-    hits: np.ndarray | None = None
-    if len(spawned_objects) >= NUMPY_COLLISION_BATCH_MIN:
-        hits = _compute_collision_hits(
-            player_position=player.position,
-            player_radius=PLAYER_COLLISION_RADIUS,
-            spawned_objects=spawned_objects,
-        )
+    if not spawned_objects:
+        run_state.spawned_objects = survivors
+        return
+
+    hits = _compute_collision_hits(
+        player_position=player.position,
+        player_radius=PLAYER_COLLISION_RADIUS,
+        spawned_objects=spawned_objects,
+    )
 
     for index, spawned in enumerate(spawned_objects):
         if not _should_handle_collision(
             spawned=spawned,
             index=index,
             hits=hits,
-            player=player,
         ):
             survivors.append(spawned)
             continue

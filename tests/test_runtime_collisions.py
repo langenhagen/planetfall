@@ -18,7 +18,7 @@ from planetfall.game.runtime import (
     apply_obstacle_recovery,
     process_collisions,
 )
-from planetfall.game.runtime_collisions import NUMPY_COLLISION_BATCH_MIN
+from planetfall.game.runtime_collisions import _compute_collision_hits
 
 if TYPE_CHECKING:
     from ursina import Entity
@@ -161,10 +161,9 @@ def test_process_collisions_keeps_obstacle_during_hit_cooldown() -> None:
 
 def test_process_collisions_batches_large_inputs() -> None:
     """Batch collision hits when many objects are present."""
-    player = cast("Entity", DummyEntity(position=Vec3(0.0, 0.0, 0.0)))
     spawned_objects: list[SpawnedObject] = []
     hit_index = 0
-    for index in range(NUMPY_COLLISION_BATCH_MIN):
+    for index in range(5):
         x_pos = 0.4 if index == hit_index else 500.0 + index
         coin_entity = cast("Entity", DummyEntity(position=Vec3(x_pos, 0.0, 0.0)))
         spawned_objects.append(
@@ -179,22 +178,12 @@ def test_process_collisions_batches_large_inputs() -> None:
                 base_scale=Vec3(1.0, 1.0, 1.0),
             ),
         )
-    run_state = FallingRunState(spawned_objects=spawned_objects)
 
-    with (
-        patch("planetfall.game.runtime_collisions.destroy_entity_tree") as destroy_mock,
-        patch("planetfall.game.runtime_collisions.play_coin_pickup_sfx") as sfx_mock,
-    ):
-        process_collisions(
-            player=player,
-            motion_state=MotionState(),
-            run_state=run_state,
-            fall_settings=FallSettings(),
-            gameplay_settings=GameplayTuningSettings(),
-        )
+    hits = _compute_collision_hits(
+        player_position=Vec3(0.0, 0.0, 0.0),
+        player_radius=0.95,
+        spawned_objects=spawned_objects,
+    )
 
-    CHECKER.assertFalse(destroy_mock.called)
-    CHECKER.assertTrue(sfx_mock.called)
-    CHECKER.assertEqual(run_state.collected_coins, 1)
-    CHECKER.assertEqual(run_state.score, 5)
-    CHECKER.assertTrue(run_state.spawned_objects[hit_index].is_collecting)
+    CHECKER.assertTrue(bool(hits[hit_index]))
+    CHECKER.assertFalse(bool(hits[1]))

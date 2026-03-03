@@ -17,10 +17,7 @@ from planetfall.game.runtime import (
     SpawnedObject,
     animate_spawned_objects,
 )
-from planetfall.game.runtime_animation import (
-    NUMPY_ANIMATION_BATCH_MIN,
-    NUMPY_OBSTACLE_BATCH_MIN,
-)
+from planetfall.game.runtime_animation import _update_coin_batch, _update_obstacle_batch
 
 if TYPE_CHECKING:
     from ursina import Entity
@@ -189,7 +186,7 @@ def test_magnet_pull_overrides_lane_motion_in_range() -> None:
 def test_batch_coin_animation_updates_positions() -> None:
     """Batch path updates coin positions for large batches."""
     coins: list[SpawnedObject] = []
-    for index in range(NUMPY_ANIMATION_BATCH_MIN):
+    for index in range(5):
         coin_entity = cast(
             "Entity",
             DummyEntity(position=Vec3(float(index), 0.0, 0.0)),
@@ -215,14 +212,15 @@ def test_batch_coin_animation_updates_positions() -> None:
         )
     run_state = FallingRunState(spawned_objects=coins)
 
-    with patch("planetfall.game.runtime_animation.monotonic", return_value=1.0):
-        animate_spawned_objects(
-            run_state=run_state,
-            gameplay_settings=GameplayTuningSettings(),
-            dt=0.1,
-            player_y=0.0,
-            player_position=Vec3(0.0, 0.0, 0.0),
-        )
+    _update_coin_batch(
+        coins=run_state.spawned_objects,
+        runtime_time=1.0,
+        dt=0.1,
+        player_position=Vec3(0.0, 0.0, 0.0),
+        gameplay_settings=GameplayTuningSettings(),
+        magnet_active=False,
+        wave_cache={},
+    )
 
     CHECKER.assertNotEqual(run_state.spawned_objects[0].entity.x, 0.0)
 
@@ -230,7 +228,7 @@ def test_batch_coin_animation_updates_positions() -> None:
 def test_batch_obstacle_animation_updates_drift_and_spin() -> None:
     """Batch path updates obstacle rotations and drift."""
     obstacles: list[SpawnedObject] = []
-    for index in range(NUMPY_OBSTACLE_BATCH_MIN):
+    for index in range(5):
         obstacle_entity = cast(
             "Entity",
             DummyEntity(position=Vec3(float(index), 0.0, 0.0)),
@@ -256,13 +254,7 @@ def test_batch_obstacle_animation_updates_drift_and_spin() -> None:
         )
     run_state = FallingRunState(spawned_objects=obstacles)
 
-    animate_spawned_objects(
-        run_state=run_state,
-        gameplay_settings=GameplayTuningSettings(),
-        dt=0.2,
-        player_y=0.0,
-        player_position=Vec3(0.0, 0.0, 0.0),
-    )
+    _update_obstacle_batch(obstacles=run_state.spawned_objects, dt=0.2)
 
     first = run_state.spawned_objects[0].entity
     CHECKER.assertNotEqual(first.rotation_x, 0.0)

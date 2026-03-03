@@ -3,7 +3,7 @@
 Owns culling thresholds and animation logic for coins, obstacles, and powerups.
 """
 
-from math import cos, sin
+from math import sin
 from time import monotonic
 from typing import TYPE_CHECKING
 
@@ -24,8 +24,6 @@ ANIMATION_CULL_DISTANCE = 170.0
 OBSTACLE_ANIMATION_CULL_DISTANCE = ANIMATION_CULL_DISTANCE * 3.0
 COIN_ANIMATION_CULL_DISTANCE = ANIMATION_CULL_DISTANCE * 2.0
 MIN_ENTITY_SCALE = 0.02
-NUMPY_ANIMATION_BATCH_MIN = 120
-NUMPY_OBSTACLE_BATCH_MIN = 120
 
 
 # C901/PLR0912/PLR0913/PLR0915: vectorized batch keeps logic consolidated.
@@ -42,107 +40,6 @@ def _update_coin_batch(  # noqa: C901, PLR0912, PLR0913, PLR0915
     wave_cache: dict[tuple[int, float], tuple[float, float, float]],
 ) -> None:
     if not coins:
-        return
-    if len(coins) < NUMPY_ANIMATION_BATCH_MIN:
-        for spawned in coins:
-            magnet_in_range = False
-            magnet_offset = Vec3(0.0, 0.0, 0.0)
-            magnet_distance = 0.0
-            magnet_radius = gameplay_settings.magnet_radius
-            if magnet_active:
-                magnet_offset = player_position - spawned.entity.position
-                magnet_distance = max(0.01, magnet_offset.length())
-                magnet_in_range = magnet_distance <= magnet_radius
-            if spawned.motion_kind and not magnet_in_range:
-                if spawned.motion_kind == "lane_wave":
-                    sway = sin(
-                        (runtime_time * spawned.motion_frequency)
-                        + spawned.motion_phase,
-                    )
-                    spawned.entity.x = spawned.base_x + (
-                        sway * spawned.motion_amplitude
-                    )
-                elif spawned.motion_kind == "lane_orbit":
-                    orbit_phase = (
-                        runtime_time * spawned.motion_frequency
-                    ) + spawned.motion_phase
-                    spawned.entity.x = spawned.base_x + (
-                        cos(orbit_phase) * spawned.motion_amplitude
-                    )
-                    spawned.entity.z = spawned.base_z + (
-                        sin(orbit_phase) * spawned.motion_amplitude
-                    )
-                elif spawned.motion_kind == "lane_slalom":
-                    slalom_phase = (
-                        runtime_time * spawned.motion_frequency
-                    ) + spawned.motion_phase
-                    sway = sin(slalom_phase)
-                    lift = cos(slalom_phase) * (spawned.motion_amplitude * 0.18)
-                    spawned.entity.x = spawned.base_x + (
-                        sway * spawned.motion_amplitude
-                    )
-                    spawned.entity.y = spawned.base_y + lift
-            if spawned.color_name == "rainbow_wave":
-                cache_key = (spawned.band_index, spawned.base_x)
-                cached = wave_cache.get(cache_key)
-                if cached is None:
-                    cached = rainbow_wave_rgb(
-                        lane_x=spawned.base_x,
-                        band_index=spawned.band_index,
-                        runtime_time=runtime_time,
-                    )
-                    wave_cache[cache_key] = cached
-                wave_red, wave_green, wave_blue = cached
-                spawned.target_rgba = (
-                    wave_red,
-                    wave_green,
-                    wave_blue,
-                    spawned.target_rgba[3],
-                )
-                spawned.entity.color = rgba_color(
-                    wave_red,
-                    wave_green,
-                    wave_blue,
-                    spawned.entity.color.a,
-                )
-            if spawned.model_name not in {"sphere", "icosphere"}:
-                spawned.entity.rotation_y += spawned.spin_speed_y * dt
-            if spawned.bob_amplitude > 0.0:
-                spawned.entity.y = spawned.base_y + (
-                    sin(
-                        (runtime_time * spawned.bob_frequency)
-                        + spawned.pulse_frequency,
-                    )
-                    * spawned.bob_amplitude
-                )
-            if spawned.pulse_amplitude > 0.0:
-                pulse_scale_value = 1.0 + (
-                    sin(
-                        (runtime_time * spawned.pulse_frequency)
-                        + spawned.bob_frequency,
-                    )
-                    * spawned.pulse_amplitude
-                )
-                spawned.entity.scale = Vec3(
-                    max(MIN_ENTITY_SCALE, spawned.base_scale.x * pulse_scale_value),
-                    max(MIN_ENTITY_SCALE, spawned.base_scale.y * pulse_scale_value),
-                    max(MIN_ENTITY_SCALE, spawned.base_scale.z * pulse_scale_value),
-                )
-            if magnet_active:
-                magnet_strength = gameplay_settings.magnet_strength
-                if magnet_in_range:
-                    pull_strength_value = 1.0 - (magnet_distance / magnet_radius)
-                    pull_distance = magnet_strength * pull_strength_value * dt
-                    pull_distance = min(pull_distance, magnet_distance)
-                    spawned.entity.position += (
-                        magnet_offset.normalized() * pull_distance
-                    )
-                    spawned.entity.rotation_y += 140.0 * dt
-                    spawned.entity.scale = Vec3(
-                        max(MIN_ENTITY_SCALE, spawned.base_scale.x * 1.12),
-                        max(MIN_ENTITY_SCALE, spawned.base_scale.y * 1.12),
-                        max(MIN_ENTITY_SCALE, spawned.base_scale.z * 1.12),
-                    )
         return
 
     positions: NDArray[np.float64] = np.array(
@@ -358,23 +255,6 @@ def _update_obstacle_batch(
     # R0914: batch math uses many intermediate arrays.
     # pylint: disable=too-many-locals
     if not obstacles:
-        return
-    if len(obstacles) < NUMPY_OBSTACLE_BATCH_MIN:
-        for spawned in obstacles:
-            if spawned.model_name not in {"sphere", "icosphere"}:
-                spawned.entity.rotation_x += spawned.spin_speed_x * dt
-                spawned.entity.rotation_y += spawned.spin_speed_y * dt
-                spawned.entity.rotation_z += spawned.spin_speed_z * dt
-                if spawned.drift_speed_x != 0.0 or spawned.drift_speed_z != 0.0:
-                    spawned.drift_blend = min(1.0, spawned.drift_blend + (dt * 1.6))
-                    blended_dt = dt * spawned.drift_blend
-                    spawned.drift_progress += blended_dt
-                    spawned.entity.x = spawned.base_x + (
-                        spawned.drift_progress * spawned.drift_speed_x
-                    )
-                    spawned.entity.z = spawned.base_z + (
-                        spawned.drift_progress * spawned.drift_speed_z
-                    )
         return
 
     spin_x = np.array([obj.spin_speed_x for obj in obstacles], dtype=np.float64)
