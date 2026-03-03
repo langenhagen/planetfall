@@ -131,7 +131,8 @@ def test_coins_use_coin_model_asset() -> None:
     CHECKER.assertEqual(coin_models, {COIN_MODEL_NAME})
 
 
-def test_obstacle_patterns_cover_all_variants() -> None:
+def test_obstacle_patterns_cover_all_variants() -> None:  # noqa: C901
+    # C901: complex test for coverage of all obstacle patterns.
     """Exercise each obstacle pattern index at least once."""
     seen_patterns = set()
     for band_index in range(OBSTACLE_PATTERN_COUNT * 2):
@@ -179,7 +180,8 @@ def test_obstacle_patterns_cover_all_variants() -> None:
     )
 
 
-def test_coin_patterns_cover_all_variants() -> None:
+def test_coin_patterns_cover_all_variants() -> None:  # noqa: C901
+    # C901: complex test for coverage of all coin patterns.
     """Exercise each coin pattern index at least once."""
     seen_patterns = set()
     for band_index in range(COIN_PATTERN_COUNT * 3):
