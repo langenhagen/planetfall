@@ -5,9 +5,6 @@ from typing import Protocol
 
 from ursina import Text
 
-SPACE_ZONE_DEPTH_LIMIT = 420.0
-ATMOSPHERE_ZONE_DEPTH_LIMIT = 980.0
-
 
 class RunStateLike(Protocol):  # pylint: disable=too-few-public-methods
     # R0903: protocol defines shape only.
@@ -71,15 +68,6 @@ def create_pause_text() -> Text:
     )
 
 
-def depth_zone_label(depth: float) -> str:
-    """Return a readable biome label for the current descent depth."""
-    if depth < SPACE_ZONE_DEPTH_LIMIT:
-        return "Deep Space"
-    if depth < ATMOSPHERE_ZONE_DEPTH_LIMIT:
-        return "Upper Atmosphere"
-    return "Planetfall"
-
-
 def update_status_text(run_state: RunStateLike, status_text: Text) -> None:
     """Render current score, depth, reset, and debug display status."""
     depth = max(0.0, -run_state.deepest_y)
@@ -91,7 +79,6 @@ def update_status_text(run_state: RunStateLike, status_text: Text) -> None:
         f"Score: {run_state.score}\n"
         f"Coins: {run_state.collected_coins}\n"
         f"Depth: {depth:.0f} m\n"
-        f"Zone: {depth_zone_label(depth)}\n"
         f"Resets: {run_state.reset_count}\n"
         f"{magnet_line}"
     )
