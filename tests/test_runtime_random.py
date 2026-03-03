@@ -40,6 +40,73 @@ def test_discrete_value_in_range_handles_single_variant() -> None:
     )
 
 
+def test_discrete_value_in_range_clamps_variant_count() -> None:
+    """Variant count below two should clamp to minimum output."""
+    CHECKER.assertEqual(
+        discrete_value_in_range(
+            seed=9,
+            variant_count=0,
+            minimum=1.25,
+            maximum=7.5,
+        ),
+        1.25,
+    )
+
+
+def test_signed_speed_from_seed_respects_magnitude_bounds() -> None:
+    """Generated speeds should stay within magnitude limits."""
+    speed = signed_speed_from_seed(
+        seed=8,
+        variant_count=7,
+        minimum_magnitude=0.4,
+        maximum_magnitude=1.1,
+    )
+    CHECKER.assertGreaterEqual(abs(speed), 0.4)
+    CHECKER.assertLessEqual(abs(speed), 1.1)
+
+
+def test_discrete_value_in_range_is_deterministic_for_seed() -> None:
+    """Same seed should return stable discrete value."""
+    first = discrete_value_in_range(
+        seed=17,
+        variant_count=6,
+        minimum=-1.0,
+        maximum=2.0,
+    )
+    for _ in range(3):
+        CHECKER.assertEqual(
+            discrete_value_in_range(
+                seed=17,
+                variant_count=6,
+                minimum=-1.0,
+                maximum=2.0,
+            ),
+            first,
+        )
+
+
+def test_discrete_value_in_range_hits_endpoints() -> None:
+    """Lowest and highest variant indices should map to range endpoints."""
+    CHECKER.assertEqual(
+        discrete_value_in_range(
+            seed=0,
+            variant_count=4,
+            minimum=2.0,
+            maximum=10.0,
+        ),
+        2.0,
+    )
+    CHECKER.assertEqual(
+        discrete_value_in_range(
+            seed=3,
+            variant_count=4,
+            minimum=2.0,
+            maximum=10.0,
+        ),
+        10.0,
+    )
+
+
 def test_signed_speed_from_seed_flips_sign_by_seed() -> None:
     """Even seeds produce negative, odd seeds positive."""
     negative_speed = signed_speed_from_seed(
