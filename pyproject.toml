@@ -20,6 +20,7 @@ dev = [
   "pytest-cov>=6.3.0",
   "pytest-randomly>=3.16.0",
   "ruff>=0.15.4",
+  "ssort>=0.16.0",
 ]
 lint = [
   "bandit>=1.9.4",

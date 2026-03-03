@@ -28,6 +28,11 @@ repos:
         name: ruff-import-sorting
         args: [--select, I, --fix]
 
+  - repo: https://github.com/bwhmather/ssort
+    rev: 0.16.0
+    hooks:
+      - id: ssort
+
   - repo: https://github.com/asottile/pyupgrade
     rev: v3.21.2
     hooks:
