@@ -36,6 +36,7 @@ def animate_spawned_objects(  # noqa: C901, PLR0912, PLR0915
     runtime_time = monotonic()
     survivors: list[SpawnedObject] = []
     magnet_active = run_state.magnet_expires_at > runtime_time
+    wave_cache: dict[tuple[int, float], tuple[float, float, float]] = {}
     for spawned in run_state.spawned_objects:
         if spawned.entity_kind == "coin" and spawned.is_collecting:
             collect_duration = max(0.001, spawned.collect_duration)
@@ -163,11 +164,16 @@ def animate_spawned_objects(  # noqa: C901, PLR0912, PLR0915
                     )
                     spawned.entity.y = spawned.base_y + lift
             if spawned.color_name == "rainbow_wave":
-                wave_red, wave_green, wave_blue = rainbow_wave_rgb(
-                    lane_x=spawned.base_x,
-                    band_index=spawned.band_index,
-                    runtime_time=runtime_time,
-                )
+                cache_key = (spawned.band_index, spawned.base_x)
+                cached = wave_cache.get(cache_key)
+                if cached is None:
+                    cached = rainbow_wave_rgb(
+                        lane_x=spawned.base_x,
+                        band_index=spawned.band_index,
+                        runtime_time=runtime_time,
+                    )
+                    wave_cache[cache_key] = cached
+                wave_red, wave_green, wave_blue = cached
                 spawned.target_rgba = (
                     wave_red,
                     wave_green,
