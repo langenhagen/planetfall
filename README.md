@@ -19,8 +19,8 @@ uv python install 3.14.3
 uv sync
 uv run planetfall               # launch the game
 uv run planetfall --fullscreen  # launch the game in fullscreen mode
+uv run planetfall --seed 12345  # deterministic spawn layouts and powerup placement
 uv run planetfall --help        # show command help
-uv run planetfall --seed 12345  # launch with a deterministic run seed
 ```
 
 ## Controls
@@ -38,6 +38,12 @@ uv run planetfall --seed 12345  # launch with a deterministic run seed
 - `v`: toggle auto yaw
 - `r`: restart run
 - `u`: toggle controls hint
+
+## Powerups
+
+- Magnet (magenta): pulls nearby coins while active.
+- Shield (cyan): negates one obstacle hit while active.
+- Multiplier (gold): increases coin score while active.
 
 ### PS5 Controller (Generic Gamepad Mapping)
 

@@ -25,7 +25,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--seed",
         type=int,
-        help="Seed for deterministic run generation",
+        help=(
+            "Seed for deterministic spawn layouts and powerup placement; "
+            "omit for random"
+        ),
     )
     return parser.parse_args()
 
