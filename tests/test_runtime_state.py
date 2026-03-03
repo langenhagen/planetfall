@@ -24,7 +24,7 @@ def test_spawned_object_defaults_motion_fields() -> None:
     """Spawned objects default to zeroed motion metadata."""
     entity = _TestEntity(name="test_spawned_object")
     spawned = SpawnedObject(
-        entity=entity,  # type: ignore[arg-type]  # arg-type: test stub for Entity.
+        entity=entity,  # arg-type: test stub for Entity.
         entity_kind="coin",
         color_name="gold",
         model_name="coin",
