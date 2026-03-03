@@ -6,9 +6,10 @@ Coordinates the main loop and re-exports runtime helpers used by tests.
 # pylint: disable=too-many-lines
 # C0302: large runtime keeps loop cohesive.
 
-from math import sin
+from dataclasses import replace
+from math import atan2, degrees, sin
 from pathlib import Path
-from random import Random
+from random import Random, SystemRandom
 from time import monotonic
 from typing import Any, cast
 
@@ -124,7 +125,6 @@ __all__ = [
     "spawn_entity_from_blueprint",
 ]
 
-RUN_RANDOM_SEED = 20260224
 COIN_PATTERN_SWITCH_METERS = 3600.0
 RANDOM_YAW_INTERVAL_SECONDS = 45.0
 RANDOM_YAW_INTERVAL_JITTER = 0.35
@@ -240,6 +240,10 @@ def initialize_run_state(
     run_state.coin_pattern_index = 0
     run_state.coin_pattern_start_y = fall_settings.initial_spawn_y
     run_state.auto_yaw_enabled = False
+    run_state.magnet_expires_at = 0.0
+    run_state.shield_expires_at = 0.0
+    run_state.coin_multiplier_expires_at = 0.0
+    run_state.coin_multiplier_factor = 1.0
 
 
 def update_coin_pattern_timer(
@@ -356,6 +360,73 @@ def maybe_update_random_yaw(
     return max(-1.0, min(1.0, yaw_delta / yaw_divisor))
 
 
+YAW_DELTA_LIMIT = 180.0
+YAW_ALIGNMENT_EPSILON = 0.01
+
+
+def _normalize_yaw_delta(delta: float) -> float:
+    """Normalize yaw delta into the [-180, 180] range."""
+    while delta > YAW_DELTA_LIMIT:
+        delta -= YAW_DELTA_LIMIT * 2.0
+    while delta < -YAW_DELTA_LIMIT:
+        delta += YAW_DELTA_LIMIT * 2.0
+    return delta
+
+
+def _resolve_coin_road_target(
+    *,
+    run_state: FallingRunState,
+    ahead_min: float,
+    ahead_max: float,
+) -> Vec3 | None:
+    """Return the average coin position in the lookahead band."""
+    coin_positions: list[Vec3] = []
+    for spawned in run_state.spawned_objects:
+        if spawned.entity_kind != "coin":
+            continue
+        if spawned.entity.y > ahead_max or spawned.entity.y < ahead_min:
+            continue
+        coin_positions.append(spawned.entity.position)
+
+    if not coin_positions:
+        return None
+
+    avg_x = sum(pos.x for pos in coin_positions) / len(coin_positions)
+    avg_z = sum(pos.z for pos in coin_positions) / len(coin_positions)
+    avg_y = sum(pos.y for pos in coin_positions) / len(coin_positions)
+    return Vec3(avg_x, avg_y, avg_z)
+
+
+def resolve_auto_yaw_axis(
+    *,
+    run_state: FallingRunState,
+    player_position: Vec3,
+    fall_settings: FallSettings,
+    camera_state: CameraState,
+    yaw_turn_speed: float,
+) -> float:
+    """Return a yaw axis that follows the next coin road."""
+    ahead_min = player_position.y - (fall_settings.spawn_ahead_distance * 0.8)
+    ahead_max = player_position.y - (fall_settings.spawn_ahead_distance * 0.2)
+    average_target = _resolve_coin_road_target(
+        run_state=run_state,
+        ahead_min=ahead_min,
+        ahead_max=ahead_max,
+    )
+    if average_target is None:
+        return 0.0
+
+    delta_x = average_target.x - player_position.x
+    delta_z = average_target.z - player_position.z
+    if abs(delta_x) <= YAW_ALIGNMENT_EPSILON and abs(delta_z) <= YAW_ALIGNMENT_EPSILON:
+        return 0.0
+
+    target_yaw = degrees(atan2(delta_x, delta_z))
+    yaw_delta = _normalize_yaw_delta(target_yaw - camera_state.yaw_angle)
+    yaw_divisor = float(max(1.0, yaw_turn_speed))
+    return max(-1.0, min(1.0, yaw_delta / yaw_divisor))
+
+
 # PLR0913: too-many-arguments; explicit inputs.
 def apply_player_movement(  # noqa: PLR0913
     # pylint: disable=too-many-arguments,too-many-locals
@@ -455,9 +526,11 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
     boost_state: dict[str, Audio | None] = {"track": None}
     controller = Entity(name="fall_game_controller")
     hit_flash = create_hit_flash()
-    run_seed = RUN_RANDOM_SEED if settings.run_seed is None else settings.run_seed
+    run_seed = settings.run_seed
     # S311: non-crypto RNG; B311: gameplay seed.
-    randomizer = Random(run_seed)  # noqa: S311  # nosec B311
+    randomizer = Random(  # noqa: S311  # nosec B311
+        SystemRandom().randint(0, 2**32 - 1) if run_seed is None else run_seed,
+    )
     camera_state = CameraState(
         yaw_angle=0.0,
         pitch_angle=settings.camera.start_pitch,
@@ -475,7 +548,8 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
         nonlocal music_track_path
         destroy_spawned_objects(run_state.spawned_objects)
         initialize_run_state(run_state, settings.fall)
-        randomizer.seed(run_seed)
+        if run_seed is not None:
+            randomizer.seed(run_seed)
         player.position = Vec3(0.0, 0.0, 0.0)
         player.rotation = Vec3(0.0, 0.0, 0.0)
         motion_state.horizontal_speed = 0.0
@@ -530,12 +604,21 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
             mouse_velocity,
         )
         yaw_input_active = abs(yaw_turn_axis) > AUTO_YAW_INPUT_EPSILON
-        yaw_turn_axis = maybe_update_random_yaw(
-            run_state,
-            camera_state=camera_state,
-            yaw_turn_axis=yaw_turn_axis,
-            settings=settings,
-        )
+        if run_state.auto_yaw_enabled and not yaw_input_active:
+            yaw_turn_axis = resolve_auto_yaw_axis(
+                run_state=run_state,
+                player_position=player.position,
+                fall_settings=settings.fall,
+                camera_state=camera_state,
+                yaw_turn_speed=settings.movement.yaw_turn_speed,
+            )
+        else:
+            yaw_turn_axis = maybe_update_random_yaw(
+                run_state,
+                camera_state=camera_state,
+                yaw_turn_axis=yaw_turn_axis,
+                settings=settings,
+            )
 
         if not run_state.is_paused:
             music_state["track"], music_track_path = start_next_music_track(
@@ -823,6 +906,14 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
 def run_game(settings: GameSettings | None = None) -> None:
     """Run the endless third-person falling game."""
     active_settings = GameSettings() if settings is None else settings
+    if active_settings.run_seed is None:
+        run_seed = SystemRandom().randint(0, 2**32 - 1)
+        # T201: visible run seed for replay/debugging.
+        print(f"Run seed: {run_seed}")  # noqa: T201
+        active_settings = replace(active_settings, run_seed=run_seed)
+    else:
+        # T201: visible run seed for replay/debugging.
+        print(f"Run seed: {active_settings.run_seed}")  # noqa: T201
     app = cast(
         "object",
         Ursina(
