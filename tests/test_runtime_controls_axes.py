@@ -65,6 +65,12 @@ def test_apply_deadzone_filters_small_values() -> None:
     CHECKER.assertEqual(apply_deadzone(0.2), 0.2)
 
 
+def test_apply_deadzone_keeps_edge_value() -> None:
+    """Values exactly at the deadzone threshold should pass through."""
+    CHECKER.assertEqual(apply_deadzone(0.08), 0.08)
+    CHECKER.assertEqual(apply_deadzone(-0.08), -0.08)
+
+
 def test_dominant_axis_prefers_stronger_source() -> None:
     """Choose whichever input source has larger magnitude."""
     CHECKER.assertEqual(dominant_axis(0.2, -0.6), -0.6)

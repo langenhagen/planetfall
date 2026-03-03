@@ -6,6 +6,7 @@ from ursina import Vec3
 
 from planetfall.game.runtime_controls import (
     clamp_to_play_area,
+    compute_control_axes,
     compute_fall_speed,
     compute_look_angles,
     compute_smoothed_lateral_speed,
@@ -81,6 +82,20 @@ def test_compute_look_angles_updates_and_clamps_pitch() -> None:
     )
     CHECKER.assertAlmostEqual(yaw, 30.0, places=5)
     CHECKER.assertEqual(pitch, 55.0)
+
+
+def test_compute_control_axes_prefers_stronger_look_input() -> None:
+    """Dominant look axis should win between mouse and gamepad."""
+    held = {
+        "gamepad right stick x": 0.2,
+        "gamepad right stick y": -0.4,
+    }
+    mouse_velocity = Vec3(0.5, -0.1, 0.0)
+
+    _, _, _, _, look_vector = compute_control_axes(held, mouse_velocity)
+
+    CHECKER.assertAlmostEqual(look_vector.x, 0.5, places=5)
+    CHECKER.assertAlmostEqual(look_vector.y, -0.1, places=5)
 
 
 def test_compute_zoom_distance_respects_limits() -> None:

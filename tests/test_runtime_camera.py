@@ -1,4 +1,4 @@
-"""Tests for auto-yaw camera helpers."""
+"""Tests for camera path helpers and auto-yaw."""
 
 from math import atan2, degrees
 from typing import Protocol
@@ -110,3 +110,12 @@ def test_resolve_path_yaw_target_matches_path_direction() -> None:
     )
     expected_yaw = degrees(atan2(direction.x, direction.z))
     CHECKER.assertAlmostEqual(float(target_yaw), expected_yaw, places=3)
+
+
+def test_resolve_path_yaw_target_returns_none_for_zero_direction() -> None:
+    """Zero-length lookahead direction should disable yaw target."""
+    target_yaw = resolve_path_yaw_target(
+        band_progress=5.0,
+        lookahead_bands=0.0,
+    )
+    CHECKER.assertIsNone(target_yaw)

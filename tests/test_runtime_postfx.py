@@ -49,3 +49,37 @@ def test_toggle_render_mode_flips_between_default_and_wireframe() -> None:
     """Toggle render mode states without cycling through extra modes."""
     CHECKER.assertEqual(toggle_render_mode("default"), "wireframe")
     CHECKER.assertEqual(toggle_render_mode("wireframe"), "default")
+
+
+def test_next_post_process_option_handles_single_option() -> None:
+    """Single option should always return index 0 and same label."""
+    options = (("Off", None),)
+    next_index, next_name, next_shader = next_post_process_option(
+        current_index=0,
+        options=options,
+    )
+    CHECKER.assertEqual(next_index, 0)
+    CHECKER.assertEqual(next_name, "Off")
+    CHECKER.assertIsNone(next_shader)
+
+
+def test_next_post_process_option_wraps_large_index() -> None:
+    """Indices larger than the option count should wrap correctly."""
+    options = (("Off", None), ("Blur", object()))
+    next_index, next_name, _ = next_post_process_option(
+        current_index=5,
+        options=options,
+    )
+    CHECKER.assertEqual(next_index, 0)
+    CHECKER.assertEqual(next_name, "Off")
+
+
+def test_next_post_process_option_handles_negative_index() -> None:
+    """Negative indices should still advance and wrap forward."""
+    options = (("Off", None), ("Blur", object()))
+    next_index, next_name, _ = next_post_process_option(
+        current_index=-1,
+        options=options,
+    )
+    CHECKER.assertEqual(next_index, 0)
+    CHECKER.assertEqual(next_name, "Off")
