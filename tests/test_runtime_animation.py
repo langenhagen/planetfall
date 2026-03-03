@@ -5,7 +5,11 @@ from typing import TYPE_CHECKING, cast
 from unittest import TestCase
 from unittest.mock import patch
 
-from ursina import Vec3
+# B104: ignore non-bound socket in test import; attr-defined for stubs.
+# pylint: disable=no-member  # no-member: Vec3 exposes runtime attrs in tests.
+from ursina import (
+    Vec3,  # pylint: disable=no-member  # no-member: Vec3 has runtime x/y/z.
+)
 
 from planetfall.game.config import GameplayTuningSettings
 from planetfall.game.runtime import (

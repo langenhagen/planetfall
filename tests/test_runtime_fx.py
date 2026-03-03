@@ -38,9 +38,10 @@ def test_trigger_impact_rumble_clamps_intensity() -> None:
 
 def test_trigger_impact_rumble_ignores_vibrate_failures() -> None:
     """Swallow exceptions from optional gamepad hooks."""
+    message = "boom"
 
     def broken_vibrate(**_kwargs: float) -> None:
-        raise RuntimeError("boom")
+        raise RuntimeError(message)
 
     with patch(
         "planetfall.game.runtime_fx.resolve_gamepad_vibrate_callable",
