@@ -126,7 +126,7 @@ scripts.
 Terms used in the game and its code.
 
 - **Band**: one vertical slice of the falling course that gets spawned at a time.
-- **Blueprint**: a data-only spawn description (see [FallingBlueprint](planetfall/game/scene.py)).
+- **Blueprint**: a data-only spawn description (see `FallingBlueprint`).
 - **Coin pattern**: the coin layout used for a band.
 - **Obstacle pattern**: the asteroid layout used for a band.
 - **Band spacing**: vertical distance between bands, used for spawn cadence.
