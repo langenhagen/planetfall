@@ -3,9 +3,11 @@
 Owns collision resolution, recovery penalties, and cleanup of passed entities.
 """
 
+from dataclasses import dataclass
 from time import monotonic
 from typing import TYPE_CHECKING
 
+import numpy as np
 from ursina import Entity, Vec3, destroy
 
 from planetfall.game.runtime_audio import (
@@ -17,6 +19,8 @@ from planetfall.game.runtime_controls import should_despawn_object
 from planetfall.game.runtime_fx import trigger_impact_rumble
 
 if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
     from planetfall.game.config import FallSettings, GameplayTuningSettings
     from planetfall.game.runtime_state import (
         FallingRunState,
@@ -27,6 +31,68 @@ if TYPE_CHECKING:
 PLAYER_COLLISION_RADIUS = 0.95
 COIN_COLLECT_ANIMATION_SECONDS = 0.18
 POWERUP_MAGNET_KIND = "magnet"
+NUMPY_COLLISION_BATCH_MIN = 80
+
+
+@dataclass(slots=True)
+class CollisionContext:
+    """Shared state used while resolving collisions for this frame."""
+
+    player: Entity
+    motion_state: MotionState
+    run_state: FallingRunState
+    fall_settings: FallSettings
+    gameplay_settings: GameplayTuningSettings
+    now: float
+
+
+def _compute_collision_hits(
+    *,
+    player_position: Vec3,
+    player_radius: float,
+    spawned_objects: list[SpawnedObject],
+) -> NDArray[np.bool_]:
+    """Return a boolean mask for which objects intersect the player."""
+    positions = np.array(
+        [
+            (
+                spawned.entity.x,
+                spawned.entity.y,
+                spawned.entity.z,
+                spawned.collision_radius,
+            )
+            for spawned in spawned_objects
+        ],
+        dtype=np.float32,
+    )
+    player_vec = np.array(
+        [player_position.x, player_position.y, player_position.z],
+        dtype=np.float32,
+    )
+    deltas = positions[:, :3] - player_vec
+    hit_radius = player_radius + positions[:, 3]
+    distance_squared: NDArray[np.floating] = np.einsum("ij,ij->i", deltas, deltas)
+    hit_distance: NDArray[np.floating] = hit_radius * hit_radius
+    return np.asarray(distance_squared <= hit_distance, dtype=np.bool_)
+
+
+def _handle_coin_collision(
+    *,
+    spawned: SpawnedObject,
+    ctx: CollisionContext,
+) -> None:
+    spawned.is_collecting = True
+    spawned.collect_started_at = ctx.now
+    spawned.collect_duration = COIN_COLLECT_ANIMATION_SECONDS
+    spawned.collect_start_position = Vec3(
+        spawned.entity.position.x,
+        spawned.entity.position.y,
+        spawned.entity.position.z,
+    )
+    spawned.collision_radius = 0.0
+    ctx.run_state.collected_coins += 1
+    ctx.run_state.score += spawned.score_value
+    play_coin_pickup_sfx()
 
 
 def apply_obstacle_recovery(
@@ -48,6 +114,70 @@ def destroy_entity_tree(entity: Entity) -> None:
     destroy(entity)
 
 
+def _handle_obstacle_collision(
+    *,
+    spawned: SpawnedObject,
+    ctx: CollisionContext,
+) -> bool:
+    if (
+        ctx.now - ctx.run_state.last_hit_time
+        < ctx.gameplay_settings.obstacle_hit_cooldown_seconds
+    ):
+        return False
+
+    destroy_entity_tree(spawned.entity)
+    ctx.run_state.last_hit_time = ctx.now
+    ctx.run_state.reset_count += 1
+    ctx.run_state.score = max(
+        0,
+        ctx.run_state.score - ctx.fall_settings.recovery_score_penalty,
+    )
+    play_obstacle_hit_sfx()
+    trigger_impact_rumble(intensity=0.65)
+    apply_obstacle_recovery(
+        player=ctx.player,
+        motion_state=ctx.motion_state,
+        recovery_height=ctx.fall_settings.recovery_height,
+    )
+    return True
+
+
+def _handle_powerup_collision(
+    *,
+    spawned: SpawnedObject,
+    ctx: CollisionContext,
+) -> None:
+    if spawned.powerup_kind == POWERUP_MAGNET_KIND:
+        ctx.run_state.magnet_expires_at = (
+            ctx.now + ctx.gameplay_settings.magnet_duration_seconds
+        )
+        ctx.run_state.score += 5
+        play_powerup_pickup_sfx()
+    destroy_entity_tree(spawned.entity)
+
+
+def _should_handle_collision(
+    *,
+    spawned: SpawnedObject,
+    index: int,
+    hits: NDArray[np.bool_] | None,
+    player: Entity,
+) -> bool:
+    if spawned.collision_radius <= 0.0:
+        return False
+    if hits is not None:
+        return bool(hits[index])
+
+    hit_radius = PLAYER_COLLISION_RADIUS + spawned.collision_radius
+    delta_y = spawned.entity.y - player.y
+    if abs(delta_y) > hit_radius:
+        return False
+
+    delta = spawned.entity.position - player.position
+    distance_squared = (delta.x * delta.x) + (delta.y * delta.y) + (delta.z * delta.z)
+    return bool(distance_squared <= (hit_radius * hit_radius))
+
+
 def process_collisions(
     *,
     player: Entity,
@@ -58,75 +188,46 @@ def process_collisions(
 ) -> None:
     """Handle collisions with coins and obstacles for score and reset behavior."""
     now = monotonic()
+    ctx = CollisionContext(
+        player=player,
+        motion_state=motion_state,
+        run_state=run_state,
+        fall_settings=fall_settings,
+        gameplay_settings=gameplay_settings,
+        now=now,
+    )
     survivors: list[SpawnedObject] = []
-
-    for spawned in run_state.spawned_objects:
-        if spawned.collision_radius <= 0.0:
-            survivors.append(spawned)
-            continue
-
-        hit_radius = PLAYER_COLLISION_RADIUS + spawned.collision_radius
-        delta_y = spawned.entity.y - player.y
-        if abs(delta_y) > hit_radius:
-            survivors.append(spawned)
-            continue
-
-        delta = spawned.entity.position - player.position
-        distance_squared = (
-            (delta.x * delta.x) + (delta.y * delta.y) + (delta.z * delta.z)
+    spawned_objects = run_state.spawned_objects
+    hits: np.ndarray | None = None
+    if len(spawned_objects) >= NUMPY_COLLISION_BATCH_MIN:
+        hits = _compute_collision_hits(
+            player_position=player.position,
+            player_radius=PLAYER_COLLISION_RADIUS,
+            spawned_objects=spawned_objects,
         )
-        if distance_squared > (hit_radius * hit_radius):
+
+    for index, spawned in enumerate(spawned_objects):
+        if not _should_handle_collision(
+            spawned=spawned,
+            index=index,
+            hits=hits,
+            player=player,
+        ):
             survivors.append(spawned)
             continue
 
         if spawned.entity_kind == "coin":
-            spawned.is_collecting = True
-            spawned.collect_started_at = now
-            spawned.collect_duration = COIN_COLLECT_ANIMATION_SECONDS
-            spawned.collect_start_position = Vec3(
-                spawned.entity.position.x,
-                spawned.entity.position.y,
-                spawned.entity.position.z,
-            )
-            spawned.collision_radius = 0.0
-            run_state.collected_coins += 1
-            run_state.score += spawned.score_value
-            play_coin_pickup_sfx()
+            _handle_coin_collision(spawned=spawned, ctx=ctx)
             survivors.append(spawned)
             continue
 
         if spawned.entity_kind == "obstacle":
-            if (
-                now - run_state.last_hit_time
-                < gameplay_settings.obstacle_hit_cooldown_seconds
-            ):
+            if not _handle_obstacle_collision(spawned=spawned, ctx=ctx):
                 survivors.append(spawned)
-                continue
-
-            destroy_entity_tree(spawned.entity)
-            run_state.last_hit_time = now
-            run_state.reset_count += 1
-            run_state.score = max(
-                0,
-                run_state.score - fall_settings.recovery_score_penalty,
-            )
-            play_obstacle_hit_sfx()
-            trigger_impact_rumble(intensity=0.65)
-            apply_obstacle_recovery(
-                player=player,
-                motion_state=motion_state,
-                recovery_height=fall_settings.recovery_height,
-            )
             continue
 
         if spawned.entity_kind == "powerup":
-            if spawned.powerup_kind == POWERUP_MAGNET_KIND:
-                run_state.magnet_expires_at = (
-                    now + gameplay_settings.magnet_duration_seconds
-                )
-                run_state.score += 5
-                play_powerup_pickup_sfx()
-            destroy_entity_tree(spawned.entity)
+            _handle_powerup_collision(spawned=spawned, ctx=ctx)
             continue
 
         destroy_entity_tree(spawned.entity)
