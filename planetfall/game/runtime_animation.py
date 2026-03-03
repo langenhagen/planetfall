@@ -312,7 +312,7 @@ def _update_obstacle_batch(
             spawned.entity.z = float(new_z[index])
 
 
-def animate_spawned_objects(  # noqa: C901, PLR0915
+def animate_spawned_objects(  # noqa: C901, PLR0912, PLR0915
     # pylint: disable=too-many-branches,too-many-locals,too-many-statements
     run_state: FallingRunState,
     gameplay_settings: GameplayTuningSettings,
@@ -325,6 +325,7 @@ def animate_spawned_objects(  # noqa: C901, PLR0915
     runtime_time = monotonic()
     survivors: list[SpawnedObject] = []
     magnet_active = run_state.magnet_expires_at > runtime_time
+    multiplier_active = run_state.coin_multiplier_expires_at > runtime_time
     wave_cache: dict[tuple[int, float], tuple[float, float, float]] = {}
     coin_batch: list[SpawnedObject] = []
     obstacle_batch: list[SpawnedObject] = []
@@ -404,6 +405,10 @@ def animate_spawned_objects(  # noqa: C901, PLR0915
         if spawned.entity_kind == "powerup":
             spawned.entity.rotation_y += 60.0 * dt
             pulse_scale = 1.0 + (sin(runtime_time * 3.2) * 0.08)
+            if spawned.powerup_kind == "shield":
+                pulse_scale *= 1.06
+            elif spawned.powerup_kind == "multiplier":
+                pulse_scale *= 1.1
             spawned.entity.scale = Vec3(
                 spawned.base_scale.x * pulse_scale,
                 spawned.base_scale.y * pulse_scale,
@@ -434,4 +439,6 @@ def animate_spawned_objects(  # noqa: C901, PLR0915
         magnet_active=magnet_active,
         wave_cache=wave_cache,
     )
+    if not multiplier_active and run_state.coin_multiplier_factor != 1.0:
+        run_state.coin_multiplier_factor = 1.0
     _update_obstacle_batch(obstacle_batch, dt=dt)

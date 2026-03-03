@@ -15,6 +15,8 @@ class RunStateLike(Protocol):  # pylint: disable=too-few-public-methods
     deepest_y: float
     reset_count: int
     magnet_expires_at: float
+    shield_expires_at: float
+    coin_multiplier_expires_at: float
 
 
 def create_controls_hint() -> Text:
@@ -72,13 +74,25 @@ def update_status_text(run_state: RunStateLike, status_text: Text) -> None:
     """Render current score, depth, reset, and debug display status."""
     depth = max(0.0, -run_state.deepest_y)
     magnet_remaining = max(0.0, run_state.magnet_expires_at - monotonic())
+    shield_remaining = max(0.0, run_state.shield_expires_at - monotonic())
+    multiplier_remaining = max(0.0, run_state.coin_multiplier_expires_at - monotonic())
     magnet_line = (
         f"Magnet: {magnet_remaining:.1f}s" if magnet_remaining > 0.0 else "Magnet: --"
+    )
+    shield_line = (
+        f"Shield: {shield_remaining:.1f}s" if shield_remaining > 0.0 else "Shield: --"
+    )
+    multiplier_line = (
+        f"Multiplier: {multiplier_remaining:.1f}s"
+        if multiplier_remaining > 0.0
+        else "Multiplier: --"
     )
     status_text.text = (
         f"Score: {run_state.score}\n"
         f"Coins: {run_state.collected_coins}\n"
         f"Depth: {depth:.0f} m\n"
         f"Resets: {run_state.reset_count}\n"
-        f"{magnet_line}"
+        f"{magnet_line}\n"
+        f"{shield_line}\n"
+        f"{multiplier_line}"
     )

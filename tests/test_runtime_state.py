@@ -12,6 +12,9 @@ def test_falling_run_state_starts_empty() -> None:
     run_state = FallingRunState()
     CHECKER.assertEqual(run_state.spawned_objects, [])
     CHECKER.assertEqual(run_state.hit_flash_expires_at, 0.0)
+    CHECKER.assertEqual(run_state.shield_expires_at, 0.0)
+    CHECKER.assertEqual(run_state.coin_multiplier_expires_at, 0.0)
+    CHECKER.assertEqual(run_state.coin_multiplier_factor, 1.0)
 
 
 class _TestEntity:  # pylint: disable=too-few-public-methods

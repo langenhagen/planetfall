@@ -187,3 +187,79 @@ def test_process_collisions_batches_large_inputs() -> None:
 
     CHECKER.assertTrue(bool(hits[hit_index]))
     CHECKER.assertFalse(bool(hits[1]))
+
+
+def test_process_collisions_consumes_shield_on_obstacle_hit() -> None:
+    """Shield powerup should nullify one obstacle hit."""
+    player = cast("Entity", DummyEntity(position=Vec3(0.0, 0.0, 0.0)))
+    obstacle_entity = cast("Entity", DummyEntity(position=Vec3(0.2, 0.0, 0.0)))
+    spawned_obstacle = SpawnedObject(
+        entity=obstacle_entity,
+        entity_kind="obstacle",
+        color_name="gray",
+        model_name="cube",
+        collision_radius=1.0,
+        score_value=0,
+        band_index=0,
+    )
+    run_state = FallingRunState(
+        score=100,
+        shield_expires_at=monotonic() + 5.0,
+        spawned_objects=[spawned_obstacle],
+    )
+
+    with (
+        patch("planetfall.game.runtime_collisions.destroy_entity_tree") as destroy_mock,
+        patch("planetfall.game.runtime_collisions.play_obstacle_hit_sfx") as sfx_mock,
+        patch(
+            "planetfall.game.runtime_collisions.trigger_impact_rumble",
+        ) as rumble_mock,
+        patch(
+            "planetfall.game.runtime_collisions.apply_obstacle_recovery",
+        ) as recovery_mock,
+    ):
+        process_collisions(
+            player=player,
+            motion_state=MotionState(),
+            run_state=run_state,
+            fall_settings=FallSettings(),
+            gameplay_settings=GameplayTuningSettings(),
+        )
+
+    CHECKER.assertTrue(destroy_mock.called)
+    CHECKER.assertTrue(sfx_mock.called)
+    CHECKER.assertTrue(rumble_mock.called)
+    CHECKER.assertFalse(recovery_mock.called)
+    CHECKER.assertGreater(run_state.shield_expires_at, 0.0)
+
+
+def test_process_collisions_applies_multiplier_to_coin_score() -> None:
+    """Coin multiplier should increase collected score."""
+    player = cast("Entity", DummyEntity(position=Vec3(0.0, 0.0, 0.0)))
+    coin_entity = cast("Entity", DummyEntity(position=Vec3(0.6, 0.0, 0.0)))
+    spawned_coin = SpawnedObject(
+        entity=coin_entity,
+        entity_kind="coin",
+        color_name="yellow",
+        model_name="models/coins/coin.bam",
+        collision_radius=0.7,
+        score_value=10,
+        band_index=0,
+        base_scale=Vec3(1.0, 1.0, 1.0),
+    )
+    run_state = FallingRunState(
+        spawned_objects=[spawned_coin],
+        coin_multiplier_expires_at=monotonic() + 5.0,
+        coin_multiplier_factor=2.0,
+    )
+
+    with patch("planetfall.game.runtime_collisions.play_coin_pickup_sfx"):
+        process_collisions(
+            player=player,
+            motion_state=MotionState(),
+            run_state=run_state,
+            fall_settings=FallSettings(),
+            gameplay_settings=GameplayTuningSettings(),
+        )
+
+    CHECKER.assertEqual(run_state.score, 20)

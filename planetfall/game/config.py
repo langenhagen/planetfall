@@ -55,6 +55,12 @@ class GameplayTuningSettings:  # pylint: disable=too-many-instance-attributes
     magnet_radius: float = 45.0
     magnet_strength: float = 42.0
     magnet_duration_seconds: float = 10.0
+    shield_duration_seconds: float = 20.0
+    coin_multiplier_duration_seconds: float = 15.0
+    coin_multiplier_factor: float = 4.0
+    powerup_magnet_weight: float = 1.0
+    powerup_shield_weight: float = 1.0
+    powerup_multiplier_weight: float = 1.0
 
 
 @dataclass(frozen=True, slots=True)

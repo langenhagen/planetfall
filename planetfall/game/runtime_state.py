@@ -94,6 +94,9 @@ class FallingRunState:  # pylint: disable=too-many-instance-attributes
     random_yaw_next_at: float = 0.0
     auto_yaw_enabled: bool = False
     magnet_expires_at: float = 0.0
+    shield_expires_at: float = 0.0
+    coin_multiplier_expires_at: float = 0.0
+    coin_multiplier_factor: float = 1.0
     next_powerup_spawn_at: float = 0.0
 
 

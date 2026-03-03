@@ -17,7 +17,11 @@ from planetfall.game.runtime_audio import (
 )
 from planetfall.game.runtime_controls import should_despawn_object
 from planetfall.game.runtime_fx import create_hit_flash, trigger_impact_rumble
-from planetfall.game.runtime_spawn_powerups import POWERUP_MAGNET_KIND
+from planetfall.game.runtime_spawn_powerups import (
+    POWERUP_MAGNET_KIND,
+    POWERUP_MULTIPLIER_KIND,
+    POWERUP_SHIELD_KIND,
+)
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -91,7 +95,13 @@ def _handle_coin_collision(
     )
     spawned.collision_radius = 0.0
     ctx.run_state.collected_coins += 1
-    ctx.run_state.score += spawned.score_value
+    coin_multiplier_active = ctx.run_state.coin_multiplier_expires_at > ctx.now
+    if coin_multiplier_active:
+        ctx.run_state.score += int(
+            spawned.score_value * ctx.run_state.coin_multiplier_factor,
+        )
+    else:
+        ctx.run_state.score += spawned.score_value
     play_coin_pickup_sfx()
 
 
@@ -124,6 +134,12 @@ def _handle_obstacle_collision(
         < ctx.gameplay_settings.obstacle_hit_cooldown_seconds
     ):
         return False
+
+    if ctx.run_state.shield_expires_at > ctx.now:
+        destroy_entity_tree(spawned.entity)
+        play_obstacle_hit_sfx()
+        trigger_impact_rumble(intensity=0.35)
+        return True
 
     destroy_entity_tree(spawned.entity)
     ctx.run_state.last_hit_time = ctx.now
@@ -161,6 +177,21 @@ def _handle_powerup_collision(
             ctx.now + ctx.gameplay_settings.magnet_duration_seconds
         )
         ctx.run_state.score += 5
+        play_powerup_pickup_sfx()
+    elif spawned.powerup_kind == POWERUP_SHIELD_KIND:
+        ctx.run_state.shield_expires_at = (
+            ctx.now + ctx.gameplay_settings.shield_duration_seconds
+        )
+        ctx.run_state.score += 10
+        play_powerup_pickup_sfx()
+    elif spawned.powerup_kind == POWERUP_MULTIPLIER_KIND:
+        ctx.run_state.coin_multiplier_expires_at = (
+            ctx.now + ctx.gameplay_settings.coin_multiplier_duration_seconds
+        )
+        ctx.run_state.coin_multiplier_factor = (
+            ctx.gameplay_settings.coin_multiplier_factor
+        )
+        ctx.run_state.score += 10
         play_powerup_pickup_sfx()
     destroy_entity_tree(spawned.entity)
 

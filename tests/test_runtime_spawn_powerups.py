@@ -13,7 +13,6 @@ CHECKER = TestCase()
 def test_schedule_next_powerup_spawn_respects_minimum_interval() -> None:
     """Powerup spawn schedule should never be below the minimum interval."""
     run_state = FallingRunState()
-    # S311/B311: non-crypto RNG; deterministic tests for spawn jitter.
     schedule_next_powerup_spawn(
         run_state=run_state,
         rng=Random(0),  # noqa: S311  # nosec B311
