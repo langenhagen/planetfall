@@ -41,6 +41,13 @@ def apply_obstacle_recovery(
     motion_state.depth_speed *= 0.2
 
 
+def destroy_entity_tree(entity: Entity) -> None:
+    """Destroy an entity and any child entities to avoid scene leaks."""
+    for child in list(entity.children):
+        destroy_entity_tree(child)
+    destroy(entity)
+
+
 def process_collisions(
     *,
     player: Entity,
@@ -125,13 +132,6 @@ def process_collisions(
         destroy_entity_tree(spawned.entity)
 
     run_state.spawned_objects = survivors
-
-
-def destroy_entity_tree(entity: Entity) -> None:
-    """Destroy an entity and any child entities to avoid scene leaks."""
-    for child in list(entity.children):
-        destroy_entity_tree(child)
-    destroy(entity)
 
 
 def destroy_spawned_objects(spawned_objects: list[SpawnedObject]) -> None:

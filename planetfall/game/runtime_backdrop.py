@@ -56,6 +56,59 @@ void main() {
 )
 
 
+def resolve_space_sky_texture_paths() -> tuple[Path, ...]:
+    """Resolve all available sky textures for timed cross-fade cycling."""
+    resolved: list[Path] = []
+
+    for extension in ("*.txo",):
+        resolved.extend(
+            sorted(
+                Path(path)
+                for path in Path(ASSETS_DIR / "sky").glob(extension)
+                if path.is_file()
+            ),
+        )
+
+    seen: set[Path] = set()
+    deduped: list[Path] = []
+    for texture_path in resolved:
+        if texture_path in seen:
+            continue
+        seen.add(texture_path)
+        deduped.append(texture_path)
+    return tuple(deduped)
+
+
+def initialize_sky_texture_blend_state(
+    sky_entity: Entity,
+) -> None:
+    # W0212: store blend state on sky entity.
+    # pylint: disable=protected-access
+    """Prepare shader inputs and runtime state for sky texture cross-fading."""
+    texture_paths = resolve_space_sky_texture_paths()
+    if not texture_paths:
+        return
+
+    texture_assets = [
+        path.relative_to(Path(ASSETS_DIR)).as_posix() for path in texture_paths
+    ]
+    preloaded_textures = tuple(
+        load_texture(texture_asset) for texture_asset in texture_assets
+    )
+    # SLF001: private access; store blend state.
+    sky_entity._sky_blend_assets = tuple(texture_assets)  # noqa: SLF001
+    sky_entity._sky_blend_textures = preloaded_textures  # noqa: SLF001
+    sky_entity._sky_blend_current = 0  # noqa: SLF001
+    sky_entity._sky_blend_next = 1 if len(texture_assets) > 1 else 0  # noqa: SLF001
+    sky_entity._sky_blend_cycle_start = monotonic()  # noqa: SLF001
+
+    sky_entity.texture = texture_assets[0]
+    if len(texture_assets) > 1:
+        sky_entity.shader = SKY_BLEND_SHADER
+        sky_entity.set_shader_input("secondary_texture", preloaded_textures[1])
+        sky_entity.set_shader_input("blend_factor", 0.0)
+
+
 # R0914: keep explicit particle tuning locals.
 def create_space_backdrop() -> BackdropState:  # pylint: disable=too-many-locals
     """Create HDRI sky plus light atmospheric motion cues."""
@@ -122,59 +175,6 @@ def create_space_backdrop() -> BackdropState:  # pylint: disable=too-many-locals
         motion_motes=tuple(motion_motes),
         space_particles=tuple(space_particles),
     )
-
-
-def resolve_space_sky_texture_paths() -> tuple[Path, ...]:
-    """Resolve all available sky textures for timed cross-fade cycling."""
-    resolved: list[Path] = []
-
-    for extension in ("*.txo",):
-        resolved.extend(
-            sorted(
-                Path(path)
-                for path in Path(ASSETS_DIR / "sky").glob(extension)
-                if path.is_file()
-            ),
-        )
-
-    seen: set[Path] = set()
-    deduped: list[Path] = []
-    for texture_path in resolved:
-        if texture_path in seen:
-            continue
-        seen.add(texture_path)
-        deduped.append(texture_path)
-    return tuple(deduped)
-
-
-def initialize_sky_texture_blend_state(
-    sky_entity: Entity,
-) -> None:
-    # W0212: store blend state on sky entity.
-    # pylint: disable=protected-access
-    """Prepare shader inputs and runtime state for sky texture cross-fading."""
-    texture_paths = resolve_space_sky_texture_paths()
-    if not texture_paths:
-        return
-
-    texture_assets = [
-        path.relative_to(Path(ASSETS_DIR)).as_posix() for path in texture_paths
-    ]
-    preloaded_textures = tuple(
-        load_texture(texture_asset) for texture_asset in texture_assets
-    )
-    # SLF001: private access; store blend state.
-    sky_entity._sky_blend_assets = tuple(texture_assets)  # noqa: SLF001
-    sky_entity._sky_blend_textures = preloaded_textures  # noqa: SLF001
-    sky_entity._sky_blend_current = 0  # noqa: SLF001
-    sky_entity._sky_blend_next = 1 if len(texture_assets) > 1 else 0  # noqa: SLF001
-    sky_entity._sky_blend_cycle_start = monotonic()  # noqa: SLF001
-
-    sky_entity.texture = texture_assets[0]
-    if len(texture_assets) > 1:
-        sky_entity.shader = SKY_BLEND_SHADER
-        sky_entity.set_shader_input("secondary_texture", preloaded_textures[1])
-        sky_entity.set_shader_input("blend_factor", 0.0)
 
 
 def update_sky_texture_blend(

@@ -70,6 +70,46 @@ Vec3 = base.Vec3
 FallingBlueprint = base.FallingBlueprint
 
 
+def _apply_coin_color_pattern(
+    blueprints: list[base.FallingBlueprint],
+    color_name: str,
+) -> list[base.FallingBlueprint]:
+    if not blueprints:
+        return blueprints
+    return [
+        (
+            replace(blueprint, color_name=color_name)
+            if blueprint.entity_kind == "coin"
+            else blueprint
+        )
+        for blueprint in blueprints
+    ]
+
+
+def _apply_obstacle_density(
+    blueprints: list[base.FallingBlueprint],
+    rng: Random,
+) -> list[base.FallingBlueprint]:
+    obstacles = [
+        blueprint for blueprint in blueprints if blueprint.entity_kind == "obstacle"
+    ]
+    if not obstacles:
+        return blueprints
+
+    reduced: list[base.FallingBlueprint] = []
+    for blueprint in blueprints:
+        if blueprint.entity_kind != "obstacle":
+            reduced.append(blueprint)
+            continue
+        if rng.random() < OBSTACLE_DENSITY_MULTIPLIER:
+            reduced.append(blueprint)
+
+    if not any(blueprint.entity_kind == "obstacle" for blueprint in reduced):
+        reduced.append(obstacles[0])
+
+    return reduced
+
+
 def build_fall_band_blueprints(
     *,
     band_index: int,
@@ -214,43 +254,3 @@ def build_fall_band_blueprints(
         )
 
     return tuple(_apply_obstacle_density(blueprints, rng))
-
-
-def _apply_coin_color_pattern(
-    blueprints: list[base.FallingBlueprint],
-    color_name: str,
-) -> list[base.FallingBlueprint]:
-    if not blueprints:
-        return blueprints
-    return [
-        (
-            replace(blueprint, color_name=color_name)
-            if blueprint.entity_kind == "coin"
-            else blueprint
-        )
-        for blueprint in blueprints
-    ]
-
-
-def _apply_obstacle_density(
-    blueprints: list[base.FallingBlueprint],
-    rng: Random,
-) -> list[base.FallingBlueprint]:
-    obstacles = [
-        blueprint for blueprint in blueprints if blueprint.entity_kind == "obstacle"
-    ]
-    if not obstacles:
-        return blueprints
-
-    reduced: list[base.FallingBlueprint] = []
-    for blueprint in blueprints:
-        if blueprint.entity_kind != "obstacle":
-            reduced.append(blueprint)
-            continue
-        if rng.random() < OBSTACLE_DENSITY_MULTIPLIER:
-            reduced.append(blueprint)
-
-    if not any(blueprint.entity_kind == "obstacle" for blueprint in reduced):
-        reduced.append(obstacles[0])
-
-    return reduced

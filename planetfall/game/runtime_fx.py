@@ -17,6 +17,19 @@ class GamepadVibrateCallable(Protocol):  # pylint: disable=too-few-public-method
         """Trigger gamepad vibration with motor intensities and duration."""
 
 
+@lru_cache(maxsize=1)
+def resolve_gamepad_vibrate_callable() -> GamepadVibrateCallable | None:
+    """Resolve and cache the optional Ursina gamepad vibrate callable."""
+    with suppress(Exception):
+        gamepad_module = importlib.import_module("ursina.gamepad")
+        if not hasattr(gamepad_module, "vibrate"):
+            return None
+        vibrate = gamepad_module.vibrate
+        if callable(vibrate):
+            return cast("GamepadVibrateCallable", vibrate)
+    return None
+
+
 def trigger_impact_rumble(intensity: float) -> None:
     """Trigger brief gamepad rumble on obstacle impact, if available."""
     vibrate = resolve_gamepad_vibrate_callable()
@@ -29,16 +42,3 @@ def trigger_impact_rumble(intensity: float) -> None:
             high_freq_motor=max(0.2, min(1.0, intensity + 0.1)),
             duration=0.09,
         )
-
-
-@lru_cache(maxsize=1)
-def resolve_gamepad_vibrate_callable() -> GamepadVibrateCallable | None:
-    """Resolve and cache the optional Ursina gamepad vibrate callable."""
-    with suppress(Exception):
-        gamepad_module = importlib.import_module("ursina.gamepad")
-        if not hasattr(gamepad_module, "vibrate"):
-            return None
-        vibrate = gamepad_module.vibrate
-        if callable(vibrate):
-            return cast("GamepadVibrateCallable", vibrate)
-    return None

@@ -25,6 +25,25 @@ def play_sfx_clip(*, clip_name: str, volume: float, pitch: float) -> None:
     audio_factory(clip_name, volume=volume, pitch=pitch, auto_destroy=True)
 
 
+@lru_cache(maxsize=8)
+def resolve_sfx_path(
+    *,
+    preferred_names: tuple[str, ...],
+    fallback_pattern: str,
+) -> Path | None:
+    """Resolve an audio file path from preferred names or a fallback glob."""
+    for file_name in preferred_names:
+        candidate_path = Path(ASSETS_DIR / file_name)
+        if candidate_path.exists():
+            return candidate_path
+
+    fallback_matches = sorted(Path(ASSETS_DIR).glob(fallback_pattern))
+    if fallback_matches:
+        return Path(fallback_matches[0])
+
+    return None
+
+
 def play_coin_pickup_sfx() -> None:
     """Play the configured coin pickup sound effect."""
     with suppress(Exception):
@@ -77,25 +96,6 @@ def resolve_boost_loop_clip() -> str | None:
 
 
 @lru_cache(maxsize=8)
-def resolve_sfx_path(
-    *,
-    preferred_names: tuple[str, ...],
-    fallback_pattern: str,
-) -> Path | None:
-    """Resolve an audio file path from preferred names or a fallback glob."""
-    for file_name in preferred_names:
-        candidate_path = Path(ASSETS_DIR / file_name)
-        if candidate_path.exists():
-            return candidate_path
-
-    fallback_matches = sorted(Path(ASSETS_DIR).glob(fallback_pattern))
-    if fallback_matches:
-        return Path(fallback_matches[0])
-
-    return None
-
-
-@lru_cache(maxsize=8)
 def resolve_music_paths() -> tuple[Path, ...]:
     """Resolve all available background music tracks."""
     music_dir = Path(ASSETS_DIR / "audio" / "music")
@@ -106,17 +106,17 @@ def resolve_music_paths() -> tuple[Path, ...]:
     )
 
 
+# S311: non-crypto RNG; gameplay playlist ordering.
+def _shuffle_playlist(playlist: list[Path]) -> None:
+    # S311: non-crypto RNG; B311: gameplay.
+    Random().shuffle(playlist)  # noqa: S311  # nosec B311
+
+
 def build_music_playlist() -> list[Path]:
     """Build a shuffled playlist of all available music tracks."""
     playlist = list(resolve_music_paths())
     _shuffle_playlist(playlist)
     return playlist
-
-
-# S311: non-crypto RNG; gameplay playlist ordering.
-def _shuffle_playlist(playlist: list[Path]) -> None:
-    # S311: non-crypto RNG; B311: gameplay.
-    Random().shuffle(playlist)  # noqa: S311  # nosec B311
 
 
 def start_music_track(track_path: Path) -> Audio:

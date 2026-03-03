@@ -325,6 +325,22 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
     )
 
 
+def schedule_next_powerup_spawn(
+    *,
+    run_state: FallingRunState,
+    rng: Random,
+    gameplay_settings: GameplayTuningSettings,
+    now: float,
+) -> None:
+    """Schedule the next powerup spawn time."""
+    jitter = rng.uniform(
+        -gameplay_settings.powerup_spawn_jitter_seconds,
+        gameplay_settings.powerup_spawn_jitter_seconds,
+    )
+    interval = max(4.0, gameplay_settings.powerup_spawn_interval_seconds + jitter)
+    run_state.next_powerup_spawn_at = now + interval
+
+
 def spawn_powerup(  # noqa: PLR0913
     # pylint: disable=too-many-arguments
     # R0913: explicit spawn inputs.
@@ -381,22 +397,6 @@ def spawn_powerup(  # noqa: PLR0913
         gameplay_settings=gameplay_settings,
         now=monotonic(),
     )
-
-
-def schedule_next_powerup_spawn(
-    *,
-    run_state: FallingRunState,
-    rng: Random,
-    gameplay_settings: GameplayTuningSettings,
-    now: float,
-) -> None:
-    """Schedule the next powerup spawn time."""
-    jitter = rng.uniform(
-        -gameplay_settings.powerup_spawn_jitter_seconds,
-        gameplay_settings.powerup_spawn_jitter_seconds,
-    )
-    interval = max(4.0, gameplay_settings.powerup_spawn_interval_seconds + jitter)
-    run_state.next_powerup_spawn_at = now + interval
 
 
 def update_powerup_spawning(  # noqa: PLR0913
