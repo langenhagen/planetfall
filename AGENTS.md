@@ -59,15 +59,15 @@ Prefer repo-local, reproducible commands:
   - `shellcheck -x --exclude SC2059 <path/to/script.sh>`
   - `shfmt --indent 4 --write <path/to/script.sh>`
 - Optional extended lint checks: `uv run --group lint pylint planetfall tests`.
-- Optional personal lint sweep: `source .venv/bin/activate && l3`.
+- Optional personal lint sweep: `scripts/full-lint.sh <path/to/file.py>`.
 - Optional personal autofix pass: `source .venv/bin/activate && rf`.
 - You can scope those tools to one file when iterating quickly:
-  - `source .venv/bin/activate && l3 path/to/file.py`
+  - `scripts/full-lint.sh path/to/file.py`
   - `source .venv/bin/activate && rf path/to/file.py`
 
-Note: `l3` runs many tools and is slow. Prefer running it on a single file
-while iterating (or as part of a per-file bigcheck sweep) instead of running
-it across the whole project.
+Note: `scripts/full-lint.sh` runs many tools and is slow. Prefer running it
+on a single file while iterating (or as part of a per-file bigcheck sweep)
+instead of running it across the whole project.
 
 Do not run full test suites automatically unless requested; use focused checks for touched files/areas first.
 
@@ -103,12 +103,12 @@ Interpret these tokens as explicit workflow commands:
   - Include both the commit message and a prose walkthrough of what changed and why.
 
 - `bigcheck` or `big check`
-  - Per-file sweep only: finish file A (run `rf`, `l3`, fix, re-run until green,
-    then vulture and pytest as appropriate) before starting file B.
+  - Per-file sweep only: finish one file (run `rf`, `scripts/full-lint.sh`, fix,
+    re-run until green) before starting another file.
   - Apply to all Python files in the repo, one after another.
-  - Run a repo-wide vulture sweep and pytest against all files at the end.
-  - Run pre-commit against all files at the end.
-  - Do not batch `l3` across multiple files or run it project-wide unless asked.
+  - Do not run `scripts/full-lint.sh` in a loop or batch it across files unless
+    explicitly asked.
+  - After the per-file sweep, run repo-wide vulture, pytest, and pre-commit.
 
 ## Commit Workflow Expectations
 

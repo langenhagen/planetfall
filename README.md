@@ -76,6 +76,7 @@ uv run planetfall
 # run quality checks
 uv run ruff check .
 uv run ruff format .
+scripts/full-lint.sh planetfall/game/scene_base.py  # expensive thorough checks
 uv run mypy planetfall/
 uv run pytest
 
