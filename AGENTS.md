@@ -99,10 +99,11 @@ Interpret these tokens as explicit workflow commands:
 - `bigcheck` or `big check`:
   - Per-file sweep only: finish one file (run `rf`, `scripts/full-lint.sh`, fix,
     re-run until green) before starting another file.
-  - Apply to all Python files in the repo, one after another.
+  - Default scope is all Python files in the repo, one after another, unless
+    explicitly stated otherwise.
   - Do not run `scripts/full-lint.sh` in a loop or batch it across files unless
     explicitly asked.
-  - After the per-file sweep, run repo-wide vulture, pytest, and pre-commit.
+  - After the per-file sweep, always run repo-wide vulture, pytest, and pre-commit.
 
 ## Commit Workflow Expectations
 
