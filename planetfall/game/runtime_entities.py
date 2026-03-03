@@ -93,16 +93,7 @@ def spawn_player_avatar() -> Entity:
 
 
 def create_player_visual_state(player: Entity) -> PlayerVisualState:
-    """Attach contrails and aura entities to enrich player visuals."""
-    aura = Entity(
-        parent=player,
-        name="player_plasma_aura",
-        model="sphere",
-        position=Vec3(0.0, -0.2, 0.0),
-        scale=Vec3(1.75, 1.95, 1.75),
-        color=rgba_color(0.3, 0.72, 1.0, 0.16),
-        unlit=True,
-    )
+    """Attach contrails and shield visuals to the player."""
     contrails = (
         Entity(
             parent=player,
@@ -123,7 +114,20 @@ def create_player_visual_state(player: Entity) -> PlayerVisualState:
             unlit=True,
         ),
     )
-    return PlayerVisualState(contrails=contrails, aura=aura)
+    shield_bubble = Entity(
+        parent=player,
+        name="player_shield_bubble",
+        model="sphere",
+        position=Vec3(0.0, -0.2, 0.0),
+        scale=Vec3(3.5, 3.5, 3.5),
+        color=rgba_color(0.15, 0.9, 1.0, 0.14),
+        unlit=True,
+        enabled=False,
+    )
+    return PlayerVisualState(
+        contrails=contrails,
+        shield_bubble=shield_bubble,
+    )
 
 
 def configure_lighting(focus_entity: Entity) -> LightingRig:

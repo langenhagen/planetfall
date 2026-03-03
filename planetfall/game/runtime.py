@@ -184,8 +184,9 @@ def update_player_visual_state(
     player_visual_state: PlayerVisualState,
     motion_state: MotionState,
     fall_speed: float,
+    shield_active: bool,
 ) -> None:
-    """Animate player aura and contrails based on speed and steering."""
+    """Animate player visuals based on speed and steering."""
     runtime_time = monotonic()
     speed_factor = max(0.0, min(1.0, (fall_speed - 10.0) / 32.0))
     lateral_factor = max(
@@ -196,14 +197,15 @@ def update_player_visual_state(
         ),
     )
 
-    aura_scale = lerp_scalar(1.65, 2.25, speed_factor)
-    player_visual_state.aura.scale = Vec3(aura_scale, aura_scale * 1.08, aura_scale)
-    player_visual_state.aura.color = rgba_color(
-        lerp_scalar(0.26, 0.62, speed_factor),
-        lerp_scalar(0.65, 0.86, speed_factor),
-        1.0,
-        lerp_scalar(0.12, 0.24, speed_factor),
-    )
+    player_visual_state.shield_bubble.enabled = shield_active
+    if shield_active:
+        player_visual_state.shield_bubble.scale = Vec3(3.5, 3.5, 3.5)
+        player_visual_state.shield_bubble.color = rgba_color(
+            0.15,
+            0.88,
+            1.0,
+            0.2,
+        )
 
     trail_width = lerp_scalar(0.08, 0.14, speed_factor)
     trail_length = lerp_scalar(1.9, 3.8, speed_factor)
@@ -585,6 +587,7 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
             player_visual_state=player_visual_state,
             motion_state=motion_state,
             fall_speed=settings.fall.base_speed,
+            shield_active=False,
         )
         update_status_text(run_state, status_text)
         hit_flash.enabled = False
@@ -822,6 +825,7 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
             player_visual_state=player_visual_state,
             motion_state=motion_state,
             fall_speed=fall_speed,
+            shield_active=run_state.shield_expires_at > monotonic(),
         )
         update_status_text(run_state, status_text)
         hit_flash_alpha = 0.0

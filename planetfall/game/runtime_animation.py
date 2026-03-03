@@ -439,6 +439,13 @@ def animate_spawned_objects(  # noqa: C901, PLR0912, PLR0915
         magnet_active=magnet_active,
         wave_cache=wave_cache,
     )
+    if multiplier_active:
+        for spawned in coin_batch:
+            spawned.entity.scale = Vec3(
+                max(MIN_ENTITY_SCALE, spawned.base_scale.x * 1.6),
+                max(MIN_ENTITY_SCALE, spawned.base_scale.y * 1.6),
+                max(MIN_ENTITY_SCALE, spawned.base_scale.z * 1.6),
+            )
     if not multiplier_active and run_state.coin_multiplier_factor != 1.0:
         run_state.coin_multiplier_factor = 1.0
     _update_obstacle_batch(obstacle_batch, dt=dt)

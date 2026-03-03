@@ -122,4 +122,4 @@ class PlayerVisualState:
     """Runtime references for player contrails and glow visuals."""
 
     contrails: tuple[Entity, ...]
-    aura: Entity
+    shield_bubble: Entity
