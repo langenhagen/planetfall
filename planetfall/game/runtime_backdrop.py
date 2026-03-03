@@ -8,7 +8,7 @@ from time import monotonic
 from typing import cast
 
 import ursina.color as color_module
-from ursina import Entity, Shader, Vec3, load_texture
+from ursina import Entity, Shader, Vec3, camera, load_texture, scene
 
 from planetfall.game.runtime_assets import ASSETS_DIR
 from planetfall.game.runtime_colors import lerp_rgb_color, rgba_color
@@ -31,13 +31,30 @@ SPACE_PARTICLE_SCALE_MAX = 0.02
 SPACE_PARTICLE_SWIRL_RATE = 0.08
 SPACE_PARTICLE_DRIFT_RATE = 14.0
 
+# Custom sky shader: compute equirectangular UVs from the sphere direction.
+# We sample object-space directions so the sky texture rotates with the dome
+# and keep the HDRI pole singularity away from straight down to avoid
+# a stretched pole band.
 SKY_BLEND_SHADER = Shader(
     name="sky_blend_shader",
     language=Shader.GLSL,
+    vertex="""
+#version 430
+
+in vec4 p3d_Vertex;
+uniform mat4 p3d_ModelViewProjectionMatrix;
+
+out vec3 sphere_dir;
+
+void main() {
+    sphere_dir = normalize(p3d_Vertex.xyz);
+    gl_Position = p3d_ModelViewProjectionMatrix * p3d_Vertex;
+}
+""",
     fragment="""
 #version 430
 
-in vec2 uv;
+in vec3 sphere_dir;
 out vec4 color;
 
 uniform sampler2D p3d_Texture0;
@@ -45,8 +62,14 @@ uniform sampler2D secondary_texture;
 uniform float blend_factor;
 
 void main() {
-    vec4 primary = texture(p3d_Texture0, uv);
-    vec4 secondary = texture(secondary_texture, uv);
+    const float pi = 3.141592653589793;
+    const float tau = 6.283185307179586;
+    vec3 dir = vec3(sphere_dir.x, sphere_dir.z, -sphere_dir.y);
+    float u = atan(dir.x, dir.z) / tau + 0.5;
+    float v = asin(clamp(dir.y, -1.0, 1.0)) / pi + 0.5;
+    vec2 sky_uv = vec2(u, v);
+    vec4 primary = texture(p3d_Texture0, sky_uv);
+    vec4 secondary = texture(secondary_texture, sky_uv);
     color = vec4(mix(primary.rgb, secondary.rgb, blend_factor), 1.0);
 }
 """,
@@ -92,21 +115,27 @@ def initialize_sky_texture_blend_state(
     texture_assets = [
         path.relative_to(Path(ASSETS_DIR)).as_posix() for path in texture_paths
     ]
-    preloaded_textures = tuple(
+    preloaded_textures = [
         load_texture(texture_asset) for texture_asset in texture_assets
-    )
+    ]
+    if not preloaded_textures:
+        return
+    preloaded_textures_tuple = tuple(preloaded_textures)
     # SLF001: private access; store blend state.
     sky_entity._sky_blend_assets = tuple(texture_assets)  # noqa: SLF001
-    sky_entity._sky_blend_textures = preloaded_textures  # noqa: SLF001
+    sky_entity._sky_blend_textures = preloaded_textures_tuple  # noqa: SLF001
     sky_entity._sky_blend_current = 0  # noqa: SLF001
     sky_entity._sky_blend_next = 1 if len(texture_assets) > 1 else 0  # noqa: SLF001
     sky_entity._sky_blend_cycle_start = monotonic()  # noqa: SLF001
 
     sky_entity.texture = texture_assets[0]
-    if len(texture_assets) > 1:
-        sky_entity.shader = SKY_BLEND_SHADER
-        sky_entity.set_shader_input("secondary_texture", preloaded_textures[1])
-        sky_entity.set_shader_input("blend_factor", 0.0)
+    sky_entity.shader = SKY_BLEND_SHADER
+    if len(preloaded_textures) > 1:
+        secondary_texture = preloaded_textures[1]
+    else:
+        secondary_texture = preloaded_textures[0]
+    sky_entity.set_shader_input("secondary_texture", secondary_texture)
+    sky_entity.set_shader_input("blend_factor", 0.0)
 
 
 # R0914: keep explicit particle tuning locals.
@@ -115,6 +144,13 @@ def create_space_backdrop() -> BackdropState:  # pylint: disable=too-many-locals
     sky_module = importlib.import_module("ursina.prefabs.sky")
     sky_factory = cast("type[Entity]", sky_module.Sky)
     sky_entity = sky_factory()
+    sky_entity.parent = scene
+
+    def update_sky() -> None:
+        sky_entity.position = camera.world_position
+        sky_entity.scale = camera.clip_plane_far * 0.8
+
+    sky_entity.update = update_sky
     initialize_sky_texture_blend_state(sky_entity)
 
     motion_motes = [
