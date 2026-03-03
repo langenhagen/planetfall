@@ -1,16 +1,16 @@
-"""Ursina runtime for an endless third-person falling game."""
+"""Ursina runtime for an endless third-person falling game.
+
+Coordinates the main loop and re-exports runtime helpers used by tests.
+"""
 
 # pylint: disable=too-many-lines
 # C0302: large runtime keeps loop cohesive.
 
-import importlib
-from contextlib import suppress
-from functools import lru_cache
-from math import cos, sin, tau
+from math import sin
 from pathlib import Path
 from random import Random
 from time import monotonic
-from typing import Any, Protocol, cast
+from typing import Any, cast
 
 import ursina
 import ursina.shaders as ursina_shaders
@@ -21,7 +21,6 @@ from ursina import (
     Vec2,
     Vec3,
     application,
-    destroy,
     lerp_exponential_decay,
     mouse,
     window,
@@ -30,17 +29,14 @@ from ursina.main import Ursina
 
 from planetfall.game.config import (
     FallSettings,
-    GameplayTuningSettings,
     GameSettings,
     MovementSettings,
 )
+from planetfall.game.runtime_animation import animate_spawned_objects
 from planetfall.game.runtime_audio import (
     BOOST_LOOP_FADE_SECONDS,
     BOOST_LOOP_VOLUME,
     build_music_playlist,
-    play_coin_pickup_sfx,
-    play_obstacle_hit_sfx,
-    play_powerup_pickup_sfx,
     resolve_boost_loop_clip,
     start_music_track,
 )
@@ -55,7 +51,13 @@ from planetfall.game.runtime_camera import (
     create_camera_orbit_rig,
     update_camera_tracking,
 )
-from planetfall.game.runtime_colors import resolve_color, rgba_color
+from planetfall.game.runtime_collisions import (
+    apply_obstacle_recovery,
+    cleanup_passed_objects,
+    destroy_spawned_objects,
+    process_collisions,
+)
+from planetfall.game.runtime_colors import rgba_color
 from planetfall.game.runtime_controls import (
     clamp_to_play_area,
     compute_control_axes,
@@ -65,16 +67,25 @@ from planetfall.game.runtime_controls import (
     compute_zoom_distance,
     lerp_scalar,
     rotate_planar_velocity_by_yaw,
-    should_despawn_object,
-    should_spawn_next_band,
 )
 from planetfall.game.runtime_entities import (
     configure_lighting,
     create_player_visual_state,
-    mark_lit_shadowed,
     spawn_player_avatar,
 )
 from planetfall.game.runtime_postfx import next_post_process_option, toggle_render_mode
+from planetfall.game.runtime_random import deterministic_probability_hit
+from planetfall.game.runtime_spawn import (
+    ASTEROID_DIFFUSE_TEXTURE_BY_MODEL,
+    ASTEROID_MODEL_NAME,
+    ASTEROID_MODEL_VARIANTS,
+    POWERUP_MAGNET_KIND,
+    POWERUP_MODEL_NAME,
+    choose_asteroid_variant,
+    spawn_bands_ahead,
+    spawn_entity_from_blueprint,
+    update_powerup_spawning,
+)
 from planetfall.game.runtime_state import (
     BackdropState,
     CameraState,
@@ -91,82 +102,24 @@ from planetfall.game.runtime_ui import (
     create_status_text,
     update_status_text,
 )
-from planetfall.game.scene import (
-    BAND_SPACING,
-    COIN_PATTERN_COUNT,
-    COIN_SCORE_VALUE,
-    MAX_COIN_ABS,
-    FallingBlueprint,
-    build_fall_band_blueprints,
-)
+from planetfall.game.scene import BAND_SPACING, COIN_PATTERN_COUNT
 
-PLAYER_COLLISION_RADIUS = 0.95
+__all__ = [
+    "ASTEROID_DIFFUSE_TEXTURE_BY_MODEL",
+    "ASTEROID_MODEL_NAME",
+    "ASTEROID_MODEL_VARIANTS",
+    "POWERUP_MAGNET_KIND",
+    "POWERUP_MODEL_NAME",
+    "SpawnedObject",
+    "animate_spawned_objects",
+    "apply_obstacle_recovery",
+    "choose_asteroid_variant",
+    "deterministic_probability_hit",
+    "process_collisions",
+    "spawn_entity_from_blueprint",
+]
+
 RUN_RANDOM_SEED = 20260224
-ASTEROID_MODEL_NAME = "models/asteroids/Asteroid_1.bam"
-POWERUP_MODEL_NAME = "icosphere"
-POWERUP_MAGNET_KIND = "magnet"
-ASTEROID_MODEL_VARIANTS: tuple[str, ...] = (
-    "models/asteroids/Asteroid_1.bam",
-    "models/asteroids/Rocky_Asteroid_2.bam",
-    "models/asteroids/Rocky_Asteroid_3.bam",
-    "models/asteroids/Rocky_Asteroid_4.bam",
-    "models/asteroids/Rocky_Asteroid_5.bam",
-    "models/asteroids/Rocky_Asteroid_6.bam",
-)
-ASTEROID_DIFFUSE_TEXTURE_BY_MODEL: dict[str, str] = {
-    "models/asteroids/Asteroid_1.bam": (
-        "models/asteroids/Textures_Asteroid_1/Asteroid_1_Diffuse_1K.png"
-    ),
-    "models/asteroids/Rocky_Asteroid_2.bam": (
-        "models/asteroids/Textures_Rocky_Asteroid_2/Rocky_Asteroid_2_Diffuse_1K.png"
-    ),
-    "models/asteroids/Rocky_Asteroid_3.bam": (
-        "models/asteroids/Textures_Rocky_Asteroid_3/Rocky_Asteroid_3_Diffuse_1K.png"
-    ),
-    "models/asteroids/Rocky_Asteroid_4.bam": (
-        "models/asteroids/Textures_Rocky_Asteroid_4/Rocky_Asteroid_4_Diffuse_1K.png"
-    ),
-    "models/asteroids/Rocky_Asteroid_5.bam": (
-        "models/asteroids/Textures_Rocky_Asteroid_5/Rocky_Asteroid_5_Diffuse_1K.png"
-    ),
-    "models/asteroids/Rocky_Asteroid_6.bam": (
-        "models/asteroids/Textures_Rocky_Asteroid_6/Rocky_Asteroid_6_Diffuse_1K.png"
-    ),
-}
-POWERUP_BASE_COLOR = rgba_color(1.0, 0.35, 0.9, 1.0)
-POWERUP_HALO_COLOR = rgba_color(0.95, 0.2, 0.8, 0.22)
-
-
-def rainbow_lane_rgb(lane_x: float) -> tuple[float, float, float]:
-    """Return a bright rainbow color based on lateral lane position."""
-    lane_span = max(0.01, MAX_COIN_ABS)
-    clamped_x = max(-lane_span, min(lane_span, lane_x))
-    phase = (clamped_x + lane_span) / (lane_span * 2.0)
-    red = 0.5 + (0.5 * sin((tau * phase) + 0.0))
-    green = 0.5 + (0.5 * sin((tau * phase) + 2.094))
-    blue = 0.5 + (0.5 * sin((tau * phase) + 4.188))
-    return red, green, blue
-
-
-def rainbow_wave_rgb(
-    *,
-    lane_x: float,
-    band_index: int,
-    runtime_time: float,
-) -> tuple[float, float, float]:
-    """Return a rainbow color that ripples along the road."""
-    lane_span = max(0.01, MAX_COIN_ABS)
-    clamped_x = max(-lane_span, min(lane_span, lane_x))
-    lane_phase = (clamped_x + lane_span) / (lane_span * 2.0)
-    wave_phase = (band_index * 0.18) + (lane_phase * 1.6) + (runtime_time * 0.6)
-    red = 0.5 + (0.5 * sin((tau * wave_phase) + 0.0))
-    green = 0.5 + (0.5 * sin((tau * wave_phase) + 2.094))
-    blue = 0.5 + (0.5 * sin((tau * wave_phase) + 4.188))
-    return red, green, blue
-
-
-ASTEROID_SCALE_MIN = 0.6
-ASTEROID_SCALE_MAX = 2.5
 COIN_PATTERN_SWITCH_METERS = 3600.0
 RANDOM_YAW_INTERVAL_SECONDS = 45.0
 RANDOM_YAW_INTERVAL_JITTER = 0.35
@@ -185,11 +138,6 @@ TOGGLE_AUTO_YAW_KEYS = {"v", "gamepad dpad right"}
 PAUSE_KEYS = {"p", "gamepad start"}
 POST_PROCESS_CYCLE_KEYS = {"t"}
 RENDER_MODE_TOGGLE_KEYS = {"y"}
-ANIMATION_CULL_DISTANCE = 170.0
-OBSTACLE_ANIMATION_CULL_DISTANCE = ANIMATION_CULL_DISTANCE * 3.0
-COIN_ANIMATION_CULL_DISTANCE = ANIMATION_CULL_DISTANCE * 2.0
-COIN_COLLECT_ANIMATION_SECONDS = 0.18
-MIN_ENTITY_SCALE = 0.02
 BOOST_DIVE_THRESHOLD = 0.05
 
 CAMERA_POST_PROCESS_OPTIONS: tuple[tuple[str, object | None], ...] = (
@@ -202,14 +150,6 @@ CAMERA_POST_PROCESS_OPTIONS: tuple[tuple[str, object | None], ...] = (
 )
 
 
-class GamepadVibrateCallable(Protocol):  # pylint: disable=too-few-public-methods
-    # R0903: protocol is single-call hook.
-    """Callable protocol for Ursina's optional gamepad vibrate hook."""
-
-    def __call__(self, **_kwargs: float) -> object:
-        """Trigger gamepad vibration with motor intensities and duration."""
-
-
 def get_frame_dt() -> float:
     """Read frame delta from Ursina's dynamic runtime module."""
     # Ursina exposes frame delta via dynamic module attributes.
@@ -220,64 +160,6 @@ def get_frame_dt() -> float:
         0.0,
     )
     return cast("float", frame_dt)
-
-
-@lru_cache(maxsize=2048)
-def deterministic_probability_hit(*, seed: int, probability: float) -> bool:
-    """Return deterministic pseudo-random chance hit from integer seed."""
-    clamped_probability = max(0.0, min(1.0, probability))
-    if clamped_probability <= 0.0:
-        return False
-    if clamped_probability >= 1.0:
-        return True
-
-    hashed_seed = (seed * 1_103_515_245 + 12_345) & 0x7FFFFFFF
-    return (hashed_seed / 0x80000000) < clamped_probability
-
-
-@lru_cache(maxsize=2048)
-def discrete_value_in_range(
-    *,
-    seed: int,
-    variant_count: int,
-    minimum: float,
-    maximum: float,
-) -> float:
-    """Map an integer seed to one of N evenly spaced values in a range."""
-    if variant_count <= 1:
-        return minimum
-
-    clamped_variant_count = max(2, variant_count)
-    variant_index = seed % clamped_variant_count
-    interpolation = variant_index / (clamped_variant_count - 1)
-    return minimum + ((maximum - minimum) * interpolation)
-
-
-@lru_cache(maxsize=2048)
-def signed_speed_from_seed(
-    *,
-    seed: int,
-    variant_count: int,
-    minimum_magnitude: float,
-    maximum_magnitude: float,
-) -> float:
-    """Generate deterministic signed speed with bidirectional variance."""
-    magnitude = discrete_value_in_range(
-        seed=seed,
-        variant_count=variant_count,
-        minimum=minimum_magnitude,
-        maximum=maximum_magnitude,
-    )
-    direction = -1.0 if seed % 2 == 0 else 1.0
-    return magnitude * direction
-
-
-@lru_cache(maxsize=256)
-def choose_asteroid_variant(variation_seed: int) -> tuple[str, str]:
-    """Select deterministic asteroid model and diffuse texture by seed."""
-    variant_index = variation_seed % len(ASTEROID_MODEL_VARIANTS)
-    model_name = ASTEROID_MODEL_VARIANTS[variant_index]
-    return model_name, ASTEROID_DIFFUSE_TEXTURE_BY_MODEL[model_name]
 
 
 def configure_window(settings: GameSettings) -> None:
@@ -335,249 +217,6 @@ def update_player_visual_state(
             1.0,
             lerp_scalar(0.2, 0.52, speed_factor),
         )
-
-
-# C901: too-complex; PLR0912: many branches; PLR0915: too-many-statements.
-def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
-    # pylint: disable=too-many-branches,too-many-locals,too-many-statements
-    # R0912: branching follows entity kind and variant setup.
-    # R0914: locals keep spawn tuning explicit per entity.
-    # R0915: setup stages are intentionally verbose for clarity.
-    *,
-    blueprint: FallingBlueprint,
-    band_index: int,
-    blueprint_index: int,
-    gameplay_settings: GameplayTuningSettings,
-) -> SpawnedObject:
-    # R0914/R0915: setup is data-heavy.
-    """Spawn one band blueprint as an Ursina entity and runtime record."""
-    variation_seed = (band_index * 41) + (blueprint_index * 17)
-    spawn_model = blueprint.model
-    spawn_texture: str | None = None
-    if blueprint.entity_kind == "obstacle" and blueprint.model == ASTEROID_MODEL_NAME:
-        spawn_model, spawn_texture = choose_asteroid_variant(variation_seed)
-
-    entity_name = (
-        f"fall_band_{band_index}_"
-        f"{blueprint.entity_kind}_"
-        f"{blueprint.name}_"
-        f"{blueprint_index}"
-    )
-    entity = Entity(
-        name=entity_name,
-        model=spawn_model,
-        color=resolve_color(blueprint.color_name),
-        scale=Vec3(blueprint.scale.x, blueprint.scale.y, blueprint.scale.z),
-        position=Vec3(
-            blueprint.position.x,
-            blueprint.position.y,
-            blueprint.position.z,
-        ),
-    )
-    if spawn_texture is not None:
-        entity.texture = spawn_texture
-
-    base_scale = Vec3(entity.scale.x, entity.scale.y, entity.scale.z)
-
-    spin_speed_x = 0.0
-    spin_speed_y = 0.0
-    spin_speed_z = 0.0
-    bob_amplitude = 0.0
-    bob_frequency = 0.0
-    pulse_amplitude = 0.0
-    pulse_frequency = 0.0
-    drift_speed_x = 0.0
-    drift_speed_z = 0.0
-    fade_duration = gameplay_settings.spawn_fade_duration_seconds
-
-    target_color = resolve_color(blueprint.color_name)
-
-    if blueprint.entity_kind == "coin":
-        entity.unlit = True
-        entity.texture = None
-        if blueprint.color_name == "rainbow":
-            rainbow_red, rainbow_green, rainbow_blue = rainbow_lane_rgb(
-                blueprint.position.x,
-            )
-        elif blueprint.color_name == "rainbow_wave":
-            rainbow_red, rainbow_green, rainbow_blue = rainbow_wave_rgb(
-                lane_x=blueprint.position.x,
-                band_index=band_index,
-                runtime_time=monotonic(),
-            )
-        else:
-            rainbow_red = 1.0
-            rainbow_green = 0.92
-            rainbow_blue = 0.22
-        target_color = rgba_color(rainbow_red, rainbow_green, rainbow_blue, 1.0)
-        is_high_value_coin = blueprint.score_value > COIN_SCORE_VALUE
-        should_render_coin_halo = deterministic_probability_hit(
-            seed=variation_seed + 13,
-            probability=gameplay_settings.high_value_coin_halo_chance,
-        )
-        if is_high_value_coin:
-            target_color = rgba_color(
-                min(1.0, rainbow_red * 1.08),
-                min(1.0, rainbow_green * 1.08),
-                min(1.0, rainbow_blue * 1.08),
-                1.0,
-            )
-            if should_render_coin_halo:
-                Entity(
-                    parent=entity,
-                    name=f"{entity_name}_coin_halo",
-                    model=spawn_model,
-                    scale=Vec3(1.18, 1.18, 1.18),
-                    color=rgba_color(
-                        min(1.0, rainbow_red * 1.1),
-                        min(1.0, rainbow_green * 1.1),
-                        min(1.0, rainbow_blue * 1.1),
-                        0.18,
-                    ),
-                    unlit=True,
-                )
-        spin_speed_x = 0.0
-        spin_speed_y = (88.0 + ((blueprint_index % 4) * 16.0)) * 0.3
-        spin_speed_z = 0.0
-        entity.rotation_x = -6.0 + ((blueprint_index % 5) * 3.0)
-        entity.rotation_y = ((band_index * 26.0) + (blueprint_index * 32.0)) % 360.0
-        entity.rotation_z = -4.0 + ((blueprint_index % 4) * 2.5)
-        bob_amplitude = 0.08 + ((variation_seed % 4) * 0.03)
-        bob_frequency = 2.5 + ((variation_seed % 5) * 0.36)
-        pulse_amplitude = 0.08 + ((variation_seed % 3) * 0.03)
-        pulse_frequency = 4.2 + ((variation_seed % 4) * 0.48)
-    else:
-        mark_lit_shadowed(entity)
-        if blueprint.entity_kind == "obstacle":
-            should_spin = deterministic_probability_hit(
-                seed=variation_seed + 3,
-                probability=0.7,
-            )
-            if blueprint.model == ASTEROID_MODEL_NAME:
-                target_color = resolve_color("white")
-                entity.unlit = False
-                entity.rotation_x = (variation_seed * 37) % 360
-                entity.rotation_y = (variation_seed * 53) % 360
-                entity.rotation_z = (variation_seed * 29) % 360
-                scale_multiplier = discrete_value_in_range(
-                    seed=variation_seed + 53,
-                    variant_count=11,
-                    minimum=ASTEROID_SCALE_MIN,
-                    maximum=ASTEROID_SCALE_MAX,
-                )
-                entity.scale = Vec3(
-                    entity.scale.x * scale_multiplier,
-                    entity.scale.y * scale_multiplier,
-                    entity.scale.z * scale_multiplier,
-                )
-                base_scale = Vec3(entity.scale.x, entity.scale.y, entity.scale.z)
-                if should_spin:
-                    should_drift = deterministic_probability_hit(
-                        seed=variation_seed + 71,
-                        probability=0.3,
-                    )
-                    if should_drift:
-                        drift_speed_x = signed_speed_from_seed(
-                            seed=variation_seed + 73,
-                            variant_count=13,
-                            minimum_magnitude=0.8,
-                            maximum_magnitude=2.2,
-                        )
-                        drift_speed_z = signed_speed_from_seed(
-                            seed=variation_seed + 79,
-                            variant_count=9,
-                            minimum_magnitude=0.2,
-                            maximum_magnitude=0.9,
-                        )
-            if should_spin:
-                spin_speed_x = signed_speed_from_seed(
-                    seed=variation_seed + 5,
-                    variant_count=gameplay_settings.obstacle_spin_variants + 6,
-                    minimum_magnitude=gameplay_settings.obstacle_spin_speed_min,
-                    maximum_magnitude=gameplay_settings.obstacle_spin_speed_max,
-                )
-                spin_speed_y = signed_speed_from_seed(
-                    seed=variation_seed + 11,
-                    variant_count=gameplay_settings.obstacle_spin_variants + 10,
-                    minimum_magnitude=gameplay_settings.obstacle_spin_speed_min,
-                    maximum_magnitude=gameplay_settings.obstacle_spin_speed_max,
-                )
-                spin_speed_z = signed_speed_from_seed(
-                    seed=variation_seed + 19,
-                    variant_count=gameplay_settings.obstacle_rock_variants + 10,
-                    minimum_magnitude=abs(gameplay_settings.obstacle_rock_speed_min),
-                    maximum_magnitude=abs(gameplay_settings.obstacle_rock_speed_max),
-                )
-        else:
-            spin_speed_x = 0.0
-            spin_speed_y = 6.0 + ((variation_seed % 5) * 2.5)
-            spin_speed_z = 0.0
-
-    target_rgba = (
-        cast("float", target_color.r),
-        cast("float", target_color.g),
-        cast("float", target_color.b),
-        cast("float", target_color.a),
-    )
-    entity.color = rgba_color(target_rgba[0], target_rgba[1], target_rgba[2], 0.0)
-
-    return SpawnedObject(
-        entity=entity,
-        entity_kind=blueprint.entity_kind,
-        color_name=blueprint.color_name,
-        model_name=spawn_model,
-        collision_radius=blueprint.collision_radius,
-        score_value=blueprint.score_value,
-        band_index=band_index,
-        spin_speed_x=spin_speed_x,
-        spin_speed_y=spin_speed_y,
-        spin_speed_z=spin_speed_z,
-        bob_amplitude=bob_amplitude,
-        bob_frequency=bob_frequency,
-        pulse_amplitude=pulse_amplitude,
-        pulse_frequency=pulse_frequency,
-        base_x=entity.x,
-        base_y=entity.y,
-        base_z=entity.z,
-        drift_speed_x=drift_speed_x,
-        drift_speed_z=drift_speed_z,
-        drift_progress=0.0,
-        base_scale=base_scale,
-        motion_kind=blueprint.motion_kind,
-        motion_amplitude=blueprint.motion_amplitude,
-        motion_frequency=blueprint.motion_frequency,
-        motion_phase=blueprint.motion_phase,
-        spawn_time=monotonic(),
-        fade_duration=fade_duration,
-        target_rgba=target_rgba,
-    )
-
-
-def trigger_impact_rumble(intensity: float) -> None:
-    """Trigger brief gamepad rumble on obstacle impact, if available."""
-    vibrate = resolve_gamepad_vibrate_callable()
-    if vibrate is None:
-        return
-
-    with suppress(Exception):
-        vibrate(
-            low_freq_motor=max(0.2, min(1.0, intensity)),
-            high_freq_motor=max(0.2, min(1.0, intensity + 0.1)),
-            duration=0.09,
-        )
-
-
-@lru_cache(maxsize=1)
-def resolve_gamepad_vibrate_callable() -> GamepadVibrateCallable | None:
-    """Resolve and cache the optional Ursina gamepad vibrate callable."""
-    with suppress(Exception):
-        gamepad_module = importlib.import_module("ursina.gamepad")
-        if not hasattr(gamepad_module, "vibrate"):
-            return None
-        vibrate = gamepad_module.vibrate
-        if callable(vibrate):
-            return cast("GamepadVibrateCallable", vibrate)
-    return None
 
 
 def initialize_run_state(
@@ -710,498 +349,6 @@ def maybe_update_random_yaw(
 
     yaw_divisor = float(max(1.0, settings.movement.yaw_turn_speed))
     return max(-1.0, min(1.0, yaw_delta / yaw_divisor))
-
-
-def destroy_entity_tree(entity: Entity) -> None:
-    """Destroy an entity and any child entities to avoid scene leaks."""
-    for child in list(entity.children):
-        destroy_entity_tree(cast("Entity", child))
-    destroy(entity)
-
-
-def destroy_spawned_objects(spawned_objects: list[SpawnedObject]) -> None:
-    """Destroy spawned entities and clear the container in-place."""
-    for spawned in spawned_objects:
-        destroy_entity_tree(spawned.entity)
-    spawned_objects.clear()
-
-
-def schedule_next_powerup_spawn(
-    *,
-    run_state: FallingRunState,
-    rng: Random,
-    gameplay_settings: GameplayTuningSettings,
-    now: float,
-) -> None:
-    """Schedule the next powerup spawn time."""
-    jitter = rng.uniform(
-        -gameplay_settings.powerup_spawn_jitter_seconds,
-        gameplay_settings.powerup_spawn_jitter_seconds,
-    )
-    interval = max(4.0, gameplay_settings.powerup_spawn_interval_seconds + jitter)
-    run_state.next_powerup_spawn_at = now + interval
-
-
-# PLR0913: explicit spawn inputs.
-def spawn_powerup(  # noqa: PLR0913
-    # pylint: disable=too-many-arguments
-    # R0913: explicit spawn inputs.
-    *,
-    run_state: FallingRunState,
-    player_y: float,
-    rng: Random,
-    fall_settings: FallSettings,
-    movement_settings: MovementSettings,
-    gameplay_settings: GameplayTuningSettings,
-) -> None:
-    """Spawn a single magnet powerup ahead of the player."""
-    spawn_y = player_y - (fall_settings.spawn_ahead_distance * 0.35)
-    max_radius = movement_settings.play_area_radius * 0.6
-    spawn_x = rng.uniform(-max_radius, max_radius)
-    spawn_z = rng.uniform(-max_radius, max_radius)
-    entity_name = f"powerup_magnet_{int(spawn_y)}"
-    entity = Entity(
-        name=entity_name,
-        model=POWERUP_MODEL_NAME,
-        color=POWERUP_BASE_COLOR,
-        scale=Vec3(1.2, 1.2, 1.2),
-        position=Vec3(spawn_x, spawn_y, spawn_z),
-    )
-    entity.unlit = True
-    Entity(
-        parent=entity,
-        name=f"{entity_name}_halo",
-        model=POWERUP_MODEL_NAME,
-        scale=Vec3(1.85, 1.85, 1.85),
-        color=POWERUP_HALO_COLOR,
-        unlit=True,
-    )
-    run_state.spawned_objects.append(
-        SpawnedObject(
-            entity=entity,
-            entity_kind="powerup",
-            color_name="magnet",
-            model_name=POWERUP_MODEL_NAME,
-            collision_radius=4.0,
-            score_value=0,
-            band_index=0,
-            base_x=entity.x,
-            base_y=entity.y,
-            base_z=entity.z,
-            base_scale=Vec3(1.2, 1.2, 1.2),
-            spawn_time=monotonic(),
-            powerup_kind=POWERUP_MAGNET_KIND,
-        ),
-    )
-    schedule_next_powerup_spawn(
-        run_state=run_state,
-        rng=rng,
-        gameplay_settings=gameplay_settings,
-        now=monotonic(),
-    )
-
-
-def spawn_bands_ahead(
-    *,
-    run_state: FallingRunState,
-    player_y: float,
-    rng: Random,
-    fall_settings: FallSettings,
-    gameplay_settings: GameplayTuningSettings,
-) -> None:
-    """Spawn new obstacle/coin bands until the ahead window is filled."""
-    while should_spawn_next_band(
-        next_band_y=run_state.next_band_y,
-        player_y=player_y,
-        spawn_ahead_distance=fall_settings.spawn_ahead_distance,
-    ):
-        blueprints = build_fall_band_blueprints(
-            band_index=run_state.next_band_index,
-            y_position=run_state.next_band_y,
-            rng=rng,
-            coin_pattern_index=run_state.coin_pattern_index,
-        )
-        for blueprint_index, blueprint in enumerate(blueprints):
-            run_state.spawned_objects.append(
-                spawn_entity_from_blueprint(
-                    blueprint=blueprint,
-                    band_index=run_state.next_band_index,
-                    blueprint_index=blueprint_index,
-                    gameplay_settings=gameplay_settings,
-                ),
-            )
-
-        run_state.next_band_index += 1
-        run_state.next_band_y -= BAND_SPACING
-
-
-# PLR0913: explicit spawn inputs.
-def update_powerup_spawning(  # noqa: PLR0913
-    # pylint: disable=too-many-arguments
-    # R0913: explicit spawn inputs.
-    *,
-    run_state: FallingRunState,
-    player_y: float,
-    rng: Random,
-    fall_settings: FallSettings,
-    movement_settings: MovementSettings,
-    gameplay_settings: GameplayTuningSettings,
-    now: float,
-) -> None:
-    """Spawn powerups on an independent timer."""
-    if run_state.next_powerup_spawn_at <= 0.0:
-        schedule_next_powerup_spawn(
-            run_state=run_state,
-            rng=rng,
-            gameplay_settings=gameplay_settings,
-            now=now,
-        )
-        spawn_powerup(
-            run_state=run_state,
-            player_y=player_y,
-            rng=rng,
-            fall_settings=fall_settings,
-            movement_settings=movement_settings,
-            gameplay_settings=gameplay_settings,
-        )
-        return
-    if now < run_state.next_powerup_spawn_at:
-        return
-    spawn_powerup(
-        run_state=run_state,
-        player_y=player_y,
-        rng=rng,
-        fall_settings=fall_settings,
-        movement_settings=movement_settings,
-        gameplay_settings=gameplay_settings,
-    )
-
-
-def cleanup_passed_objects(
-    *,
-    run_state: FallingRunState,
-    player_y: float,
-    cleanup_above_distance: float,
-) -> None:
-    """Destroy objects that are far above the player after being passed."""
-    survivors: list[SpawnedObject] = []
-    for spawned in run_state.spawned_objects:
-        if should_despawn_object(
-            object_y=spawned.entity.y,
-            player_y=player_y,
-            cleanup_above_distance=cleanup_above_distance,
-        ):
-            destroy_entity_tree(spawned.entity)
-            continue
-        survivors.append(spawned)
-
-    run_state.spawned_objects = survivors
-
-
-def apply_obstacle_recovery(
-    *,
-    player: Entity,
-    motion_state: MotionState,
-    recovery_height: float,
-) -> None:
-    """Move the player upward after an obstacle hit and damp momentum."""
-    player.y += recovery_height
-    motion_state.horizontal_speed *= 0.2
-    motion_state.depth_speed *= 0.2
-
-
-def process_collisions(
-    *,
-    player: Entity,
-    motion_state: MotionState,
-    run_state: FallingRunState,
-    fall_settings: FallSettings,
-    gameplay_settings: GameplayTuningSettings,
-) -> None:
-    """Handle collisions with coins and obstacles for score and reset behavior."""
-    now = monotonic()
-    survivors: list[SpawnedObject] = []
-
-    for spawned in run_state.spawned_objects:
-        if spawned.collision_radius <= 0.0:
-            survivors.append(spawned)
-            continue
-
-        hit_radius = PLAYER_COLLISION_RADIUS + spawned.collision_radius
-        delta_y = spawned.entity.y - player.y
-        if abs(delta_y) > hit_radius:
-            survivors.append(spawned)
-            continue
-
-        delta = spawned.entity.position - player.position
-        distance_squared = (
-            (delta.x * delta.x) + (delta.y * delta.y) + (delta.z * delta.z)
-        )
-        if distance_squared > (hit_radius * hit_radius):
-            survivors.append(spawned)
-            continue
-
-        if spawned.entity_kind == "coin":
-            spawned.is_collecting = True
-            spawned.collect_started_at = now
-            spawned.collect_duration = COIN_COLLECT_ANIMATION_SECONDS
-            spawned.collect_start_position = Vec3(
-                spawned.entity.position.x,
-                spawned.entity.position.y,
-                spawned.entity.position.z,
-            )
-            spawned.collision_radius = 0.0
-            run_state.collected_coins += 1
-            run_state.score += spawned.score_value
-            play_coin_pickup_sfx()
-            survivors.append(spawned)
-            continue
-
-        if spawned.entity_kind == "obstacle":
-            if (
-                now - run_state.last_hit_time
-                < gameplay_settings.obstacle_hit_cooldown_seconds
-            ):
-                survivors.append(spawned)
-                continue
-
-            destroy_entity_tree(spawned.entity)
-            run_state.last_hit_time = now
-            run_state.reset_count += 1
-            run_state.score = max(
-                0,
-                run_state.score - fall_settings.recovery_score_penalty,
-            )
-            play_obstacle_hit_sfx()
-            trigger_impact_rumble(intensity=0.65)
-            apply_obstacle_recovery(
-                player=player,
-                motion_state=motion_state,
-                recovery_height=fall_settings.recovery_height,
-            )
-            continue
-
-        if spawned.entity_kind == "powerup":
-            if spawned.powerup_kind == POWERUP_MAGNET_KIND:
-                run_state.magnet_expires_at = (
-                    now + gameplay_settings.magnet_duration_seconds
-                )
-                run_state.score += 5
-                play_powerup_pickup_sfx()
-            destroy_entity_tree(spawned.entity)
-            continue
-
-        destroy_entity_tree(spawned.entity)
-
-    run_state.spawned_objects = survivors
-
-
-# C901: too-complex; PLR0912: too-many-branches; PLR0915: too-many-statements.
-def animate_spawned_objects(  # noqa: C901, PLR0912, PLR0915
-    # pylint: disable=too-many-branches,too-many-locals,too-many-statements
-    run_state: FallingRunState,
-    gameplay_settings: GameplayTuningSettings,
-    dt: float,
-    player_y: float,
-    player_position: Vec3,
-) -> None:
-    # R0912/R0914/R0915: frame loop.
-    """Animate collectibles and obstacles for richer motion language."""
-    runtime_time = monotonic()
-    survivors: list[SpawnedObject] = []
-    magnet_active = run_state.magnet_expires_at > runtime_time
-    for spawned in run_state.spawned_objects:
-        if spawned.entity_kind == "coin" and spawned.is_collecting:
-            collect_duration = max(0.001, spawned.collect_duration)
-            collect_progress = max(
-                0.0,
-                min(
-                    1.0,
-                    (runtime_time - spawned.collect_started_at) / collect_duration,
-                ),
-            )
-            # Keep transforms invertible; a zero-scale frame can trigger
-            # Panda's has_mat() assertion in render/cull internals.
-            if collect_progress >= 1.0:
-                destroy_entity_tree(spawned.entity)
-                continue
-
-            collect_ease = 1.0 - ((1.0 - collect_progress) ** 3)
-            collect_target = Vec3(
-                player_position.x,
-                player_position.y + 0.45,
-                player_position.z,
-            )
-            spawned.entity.position = spawned.collect_start_position + (
-                (collect_target - spawned.collect_start_position) * collect_ease
-            )
-            collect_scale = max(0.0, 1.0 - collect_progress)
-            spawned.entity.scale = Vec3(
-                max(MIN_ENTITY_SCALE, spawned.base_scale.x * collect_scale),
-                max(MIN_ENTITY_SCALE, spawned.base_scale.y * collect_scale),
-                max(MIN_ENTITY_SCALE, spawned.base_scale.z * collect_scale),
-            )
-
-            survivors.append(spawned)
-            continue
-
-        if spawned.fade_duration > 0.0:
-            target_red, target_green, target_blue, target_alpha = spawned.target_rgba
-            elapsed = runtime_time - spawned.spawn_time
-            if elapsed >= spawned.fade_duration:
-                spawned.entity.color = rgba_color(
-                    target_red,
-                    target_green,
-                    target_blue,
-                    target_alpha,
-                )
-                spawned.fade_duration = 0.0
-            else:
-                fade_progress = max(0.0, min(1.0, elapsed / spawned.fade_duration))
-                alpha_blend = 0.35 + (fade_progress * 0.65)
-                spawned.entity.color = rgba_color(
-                    target_red,
-                    target_green,
-                    target_blue,
-                    target_alpha * alpha_blend,
-                )
-
-        cull_distance = (
-            COIN_ANIMATION_CULL_DISTANCE
-            if spawned.entity_kind == "coin"
-            else (
-                OBSTACLE_ANIMATION_CULL_DISTANCE
-                if spawned.entity_kind == "obstacle"
-                else ANIMATION_CULL_DISTANCE
-            )
-        )
-        if abs(spawned.entity.y - player_y) > cull_distance:
-            if spawned.drift_speed_x != 0.0 or spawned.drift_speed_z != 0.0:
-                spawned.drift_blend = 0.0
-            survivors.append(spawned)
-            continue
-
-        is_sphere_model = spawned.model_name in {"sphere", "icosphere"}
-
-        if spawned.entity_kind == "powerup":
-            spawned.entity.rotation_y += 60.0 * dt
-            pulse_scale = 1.0 + (sin(runtime_time * 3.2) * 0.08)
-            spawned.entity.scale = Vec3(
-                spawned.base_scale.x * pulse_scale,
-                spawned.base_scale.y * pulse_scale,
-                spawned.base_scale.z * pulse_scale,
-            )
-            survivors.append(spawned)
-            continue
-
-        if spawned.entity_kind == "coin":
-            if magnet_active:
-                magnet_strength = gameplay_settings.magnet_strength
-                magnet_radius = gameplay_settings.magnet_radius
-                offset = player_position - spawned.entity.position
-                distance = max(0.01, offset.length())
-                if distance <= magnet_radius:
-                    pull_strength = 1.0 - (distance / magnet_radius)
-                    pull_distance = magnet_strength * pull_strength * dt
-                    pull_distance = min(pull_distance, distance)
-                    spawned.entity.position += offset.normalized() * pull_distance
-                    spawned.entity.rotation_y += 140.0 * dt
-                    spawned.entity.scale = Vec3(
-                        max(MIN_ENTITY_SCALE, spawned.base_scale.x * 1.12),
-                        max(MIN_ENTITY_SCALE, spawned.base_scale.y * 1.12),
-                        max(MIN_ENTITY_SCALE, spawned.base_scale.z * 1.12),
-                    )
-            if spawned.motion_kind and not spawned.is_collecting:
-                if spawned.motion_kind == "lane_wave":
-                    sway = sin(
-                        (runtime_time * spawned.motion_frequency)
-                        + spawned.motion_phase,
-                    )
-                    spawned.entity.x = spawned.base_x + (
-                        sway * spawned.motion_amplitude
-                    )
-                elif spawned.motion_kind == "lane_orbit":
-                    orbit_phase = (
-                        runtime_time * spawned.motion_frequency
-                    ) + spawned.motion_phase
-                    spawned.entity.x = spawned.base_x + (
-                        cos(orbit_phase) * spawned.motion_amplitude
-                    )
-                    spawned.entity.z = spawned.base_z + (
-                        sin(orbit_phase) * spawned.motion_amplitude
-                    )
-                elif spawned.motion_kind == "lane_slalom":
-                    slalom_phase = (
-                        runtime_time * spawned.motion_frequency
-                    ) + spawned.motion_phase
-                    sway = sin(slalom_phase)
-                    lift = cos(slalom_phase) * (spawned.motion_amplitude * 0.18)
-                    spawned.entity.x = spawned.base_x + (
-                        sway * spawned.motion_amplitude
-                    )
-                    spawned.entity.y = spawned.base_y + lift
-            if spawned.color_name == "rainbow_wave":
-                wave_red, wave_green, wave_blue = rainbow_wave_rgb(
-                    lane_x=spawned.base_x,
-                    band_index=spawned.band_index,
-                    runtime_time=runtime_time,
-                )
-                spawned.target_rgba = (
-                    wave_red,
-                    wave_green,
-                    wave_blue,
-                    spawned.target_rgba[3],
-                )
-                spawned.entity.color = rgba_color(
-                    wave_red,
-                    wave_green,
-                    wave_blue,
-                    spawned.entity.color.a,
-                )
-            if not is_sphere_model:
-                spawned.entity.rotation_y += spawned.spin_speed_y * dt
-            if spawned.bob_amplitude > 0.0:
-                spawned.entity.y = spawned.base_y + (
-                    sin(
-                        (runtime_time * spawned.bob_frequency)
-                        + spawned.pulse_frequency,
-                    )
-                    * spawned.bob_amplitude
-                )
-            if spawned.pulse_amplitude > 0.0:
-                pulse_scale = 1.0 + (
-                    sin(
-                        (runtime_time * spawned.pulse_frequency)
-                        + spawned.bob_frequency,
-                    )
-                    * spawned.pulse_amplitude
-                )
-                spawned.entity.scale = Vec3(
-                    max(MIN_ENTITY_SCALE, spawned.base_scale.x * pulse_scale),
-                    max(MIN_ENTITY_SCALE, spawned.base_scale.y * pulse_scale),
-                    max(MIN_ENTITY_SCALE, spawned.base_scale.z * pulse_scale),
-                )
-            survivors.append(spawned)
-            continue
-
-        if not is_sphere_model:
-            spawned.entity.rotation_x += spawned.spin_speed_x * dt
-            spawned.entity.rotation_y += spawned.spin_speed_y * dt
-            spawned.entity.rotation_z += spawned.spin_speed_z * dt
-            if spawned.drift_speed_x != 0.0 or spawned.drift_speed_z != 0.0:
-                spawned.drift_blend = min(1.0, spawned.drift_blend + (dt * 1.6))
-                blended_dt = dt * spawned.drift_blend
-                spawned.drift_progress += blended_dt
-                spawned.entity.x = spawned.base_x + (
-                    spawned.drift_progress * spawned.drift_speed_x
-                )
-                spawned.entity.z = spawned.base_z + (
-                    spawned.drift_progress * spawned.drift_speed_z
-                )
-
-        survivors.append(spawned)
-
-    run_state.spawned_objects = survivors
 
 
 # PLR0913: too-many-arguments; explicit inputs.

@@ -75,10 +75,14 @@ def test_process_collisions_keeps_obstacle_during_hit_cooldown() -> None:
     )
 
     with (
-        patch("planetfall.game.runtime.destroy_entity_tree") as destroy_mock,
-        patch("planetfall.game.runtime.play_obstacle_hit_sfx") as sfx_mock,
-        patch("planetfall.game.runtime.trigger_impact_rumble") as rumble_mock,
-        patch("planetfall.game.runtime.apply_obstacle_recovery") as recovery_mock,
+        patch("planetfall.game.runtime_collisions.destroy_entity_tree") as destroy_mock,
+        patch("planetfall.game.runtime_collisions.play_obstacle_hit_sfx") as sfx_mock,
+        patch(
+            "planetfall.game.runtime_collisions.trigger_impact_rumble"
+        ) as rumble_mock,
+        patch(
+            "planetfall.game.runtime_collisions.apply_obstacle_recovery"
+        ) as recovery_mock,
     ):
         process_collisions(
             player=player,
