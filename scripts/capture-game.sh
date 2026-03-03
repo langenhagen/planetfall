@@ -22,7 +22,7 @@ Usage:
 Options:
   --run-game                  Launch game and capture its stdout/stderr log
   --game-cmd <command>        Command used with --run-game
-                              (default: .venv/bin/python -u planetfall/cli.py)
+                              (default: uv run planetfall)
   -h, --help                  Show this help
 
 Examples:
@@ -44,7 +44,7 @@ EOF
 }
 
 RUN_GAME="0"
-GAME_CMD=".venv/bin/python -u planetfall/cli.py"
+GAME_CMD="uv run planetfall"
 CAPTURE_ARGS=()
 
 while [[ $# -gt 0 ]]; do
