@@ -393,8 +393,7 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
     target_color = resolve_color(blueprint.color_name)
 
     if blueprint.entity_kind == "coin":
-        mark_lit_shadowed(entity)
-        entity.unlit = False
+        entity.unlit = True
         entity.texture = None
         if blueprint.color_name == "rainbow":
             rainbow_red, rainbow_green, rainbow_blue = rainbow_lane_rgb(

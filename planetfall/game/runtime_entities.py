@@ -9,12 +9,12 @@ from ursina import AmbientLight, DirectionalLight, Entity, Vec3
 from planetfall.game.runtime_colors import resolve_color, rgba_color
 from planetfall.game.runtime_state import LightingRig, PlayerVisualState
 
-LIT_SHADER = cast("object", ursina_shaders.lit_with_shadows_shader)
+DEFAULT_LIT_SHADER = cast("object", ursina_shaders.basic_lighting_shader)
 
 
 def mark_lit_shadowed(entity: Entity) -> Entity:
-    """Apply the project-default lit shader without shadow casting."""
-    entity.shader = LIT_SHADER
+    """Apply the project-default lit shader."""
+    entity.shader = DEFAULT_LIT_SHADER
     return entity
 
 
@@ -127,7 +127,7 @@ def create_player_visual_state(player: Entity) -> PlayerVisualState:
 
 
 def configure_lighting(focus_entity: Entity) -> LightingRig:
-    """Create one sun light and ambient fill without drop shadows."""
+    """Create one sun light and ambient fill."""
     sun_direction = Vec3(0.75, -1.2, -0.45).normalized()
     key_light = DirectionalLight(shadows=False)
     key_light.color = color_module.white
