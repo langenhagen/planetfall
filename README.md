@@ -10,14 +10,12 @@ obstacles, and collects chained glowing coins while descending.
 
 ## Requirements
 
-- `pyenv`
 - `uv`
 
 ## Quick Start
 
 ```bash
-pyenv install -s 3.14.3
-pyenv local 3.14.3
+uv python install 3.14.3
 uv sync
 uv run planetfall               # launch the game
 uv run planetfall --fullscreen  # launch the game in fullscreen mode
@@ -63,9 +61,8 @@ Ursina exposes standard gamepad names, so PS5 controls map as:
 ## Full Setup and Checks
 
 ```bash
-# install and activate the pinned Python version
-pyenv install -s 3.14.3
-pyenv local 3.14.3
+# install the pinned Python version
+uv python install 3.14.3
 
 # create/update virtual environment and dependencies
 uv sync

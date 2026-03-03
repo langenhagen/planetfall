@@ -19,7 +19,7 @@ Practical guidance for humans and coding agents working in this repository.
 ## Project Stack
 
 - Language: Python.
-- Runtime/version management: `pyenv`.
+- Runtime/version management: `uv`.
 - Package/dependency/task workflow: `uv`.
 - Game runtime: `ursina`.
 - Test framework: `pytest`.
@@ -32,7 +32,7 @@ Practical guidance for humans and coding agents working in this repository.
 - `planetfall/`: application package.
 - `tests/`: unit and integration tests.
 - `pyproject.toml`: project metadata and tool configuration.
-- `.python-version`: pinned Python version for `pyenv`.
+- `.python-version`: pinned Python version for tooling that reads it.
 
 ## Local Workflow
 
