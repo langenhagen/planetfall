@@ -141,7 +141,7 @@ def obstacle_blueprint(  # noqa: PLR0913
             y_pos,
             clamp_collidable_axis(z_pos),
         ),
-        collision_radius=max(scale.x, scale.y, scale.z) * 0.55,
+        collision_radius=max(scale.x, scale.y, scale.z),
     )
 
 
