@@ -12,7 +12,7 @@ from ursina import Vec3
 
 from planetfall.game.runtime_collisions import destroy_entity_tree
 from planetfall.game.runtime_colors import rgba_color
-from planetfall.game.runtime_spawn import rainbow_wave_rgb
+from planetfall.game.runtime_spawn_coins import rainbow_wave_rgb
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray

@@ -76,15 +76,19 @@ from planetfall.game.runtime_entities import (
 from planetfall.game.runtime_postfx import next_post_process_option, toggle_render_mode
 from planetfall.game.runtime_random import deterministic_probability_hit
 from planetfall.game.runtime_spawn import (
-    ASTEROID_DIFFUSE_TEXTURE_BY_MODEL,
-    ASTEROID_MODEL_NAME,
-    ASTEROID_MODEL_VARIANTS,
-    POWERUP_MAGNET_KIND,
-    POWERUP_MODEL_NAME,
-    choose_asteroid_variant,
     spawn_bands_ahead,
     spawn_entity_from_blueprint,
     update_powerup_spawning,
+)
+from planetfall.game.runtime_spawn_obstacles import (
+    ASTEROID_DIFFUSE_TEXTURE_BY_MODEL,
+    ASTEROID_MODEL_NAME,
+    ASTEROID_MODEL_VARIANTS,
+    choose_asteroid_variant,
+)
+from planetfall.game.runtime_spawn_powerups import (
+    POWERUP_MAGNET_KIND,
+    POWERUP_MODEL_NAME,
 )
 from planetfall.game.runtime_state import (
     BackdropState,

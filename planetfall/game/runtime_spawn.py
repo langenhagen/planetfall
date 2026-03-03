@@ -1,10 +1,5 @@
-"""Runtime entity spawning helpers.
+"""Runtime entity spawning helpers."""
 
-Owns asteroid model selection, rainbow color helpers, blueprint-to-entity
-spawning, and band/powerup spawn orchestration.
-"""
-
-from math import sin, tau
 from time import monotonic
 from typing import TYPE_CHECKING, cast
 
@@ -18,96 +13,33 @@ from planetfall.game.runtime_random import (
     discrete_value_in_range,
     signed_speed_from_seed,
 )
+from planetfall.game.runtime_spawn_coins import rainbow_lane_rgb, rainbow_wave_rgb
+from planetfall.game.runtime_spawn_obstacles import (
+    ASTEROID_MODEL_NAME,
+    ASTEROID_SCALE_MAX,
+    ASTEROID_SCALE_MIN,
+    choose_asteroid_variant,
+)
+from planetfall.game.runtime_spawn_powerups import update_powerup_spawning
 from planetfall.game.runtime_state import SpawnedObject
 from planetfall.game.scene import (
     BAND_SPACING,
     COIN_SCORE_VALUE,
+    FallingBlueprint,
     build_fall_band_blueprints,
 )
-from planetfall.game.scene_base import MAX_COIN_ABS
 
 if TYPE_CHECKING:
     from random import Random
 
-    from planetfall.game.config import (
-        FallSettings,
-        GameplayTuningSettings,
-        MovementSettings,
-    )
+    from planetfall.game.config import FallSettings, GameplayTuningSettings
     from planetfall.game.runtime_state import FallingRunState
-    from planetfall.game.scene import FallingBlueprint
 
-ASTEROID_MODEL_NAME = "models/asteroids/Asteroid_1.bam"
-ASTEROID_MODEL_VARIANTS: tuple[str, ...] = (
-    "models/asteroids/Asteroid_1.bam",
-    "models/asteroids/Rocky_Asteroid_2.bam",
-    "models/asteroids/Rocky_Asteroid_3.bam",
-    "models/asteroids/Rocky_Asteroid_4.bam",
-    "models/asteroids/Rocky_Asteroid_5.bam",
-    "models/asteroids/Rocky_Asteroid_6.bam",
-)
-ASTEROID_DIFFUSE_TEXTURE_BY_MODEL: dict[str, str] = {
-    "models/asteroids/Asteroid_1.bam": (
-        "models/asteroids/Textures_Asteroid_1/Asteroid_1_Diffuse_1K.png"
-    ),
-    "models/asteroids/Rocky_Asteroid_2.bam": (
-        "models/asteroids/Textures_Rocky_Asteroid_2/Rocky_Asteroid_2_Diffuse_1K.png"
-    ),
-    "models/asteroids/Rocky_Asteroid_3.bam": (
-        "models/asteroids/Textures_Rocky_Asteroid_3/Rocky_Asteroid_3_Diffuse_1K.png"
-    ),
-    "models/asteroids/Rocky_Asteroid_4.bam": (
-        "models/asteroids/Textures_Rocky_Asteroid_4/Rocky_Asteroid_4_Diffuse_1K.png"
-    ),
-    "models/asteroids/Rocky_Asteroid_5.bam": (
-        "models/asteroids/Textures_Rocky_Asteroid_5/Rocky_Asteroid_5_Diffuse_1K.png"
-    ),
-    "models/asteroids/Rocky_Asteroid_6.bam": (
-        "models/asteroids/Textures_Rocky_Asteroid_6/Rocky_Asteroid_6_Diffuse_1K.png"
-    ),
-}
-ASTEROID_SCALE_MIN = 0.6
-ASTEROID_SCALE_MAX = 2.5
-
-POWERUP_MODEL_NAME = "icosphere"
-POWERUP_MAGNET_KIND = "magnet"
-POWERUP_BASE_COLOR = rgba_color(1.0, 0.35, 0.9, 1.0)
-POWERUP_HALO_COLOR = rgba_color(0.95, 0.2, 0.8, 0.22)
-
-
-def rainbow_lane_rgb(lane_x: float) -> tuple[float, float, float]:
-    """Return a bright rainbow color based on lateral lane position."""
-    lane_span = max(0.01, MAX_COIN_ABS)
-    clamped_x = max(-lane_span, min(lane_span, lane_x))
-    phase = (clamped_x + lane_span) / (lane_span * 2.0)
-    red = 0.5 + (0.5 * sin((tau * phase) + 0.0))
-    green = 0.5 + (0.5 * sin((tau * phase) + 2.094))
-    blue = 0.5 + (0.5 * sin((tau * phase) + 4.188))
-    return red, green, blue
-
-
-def rainbow_wave_rgb(
-    *,
-    lane_x: float,
-    band_index: int,
-    runtime_time: float,
-) -> tuple[float, float, float]:
-    """Return a rainbow color that ripples along the road."""
-    lane_span = max(0.01, MAX_COIN_ABS)
-    clamped_x = max(-lane_span, min(lane_span, lane_x))
-    lane_phase = (clamped_x + lane_span) / (lane_span * 2.0)
-    wave_phase = (band_index * 0.18) + (lane_phase * 1.6) + (runtime_time * 0.6)
-    red = 0.5 + (0.5 * sin((tau * wave_phase) + 0.0))
-    green = 0.5 + (0.5 * sin((tau * wave_phase) + 2.094))
-    blue = 0.5 + (0.5 * sin((tau * wave_phase) + 4.188))
-    return red, green, blue
-
-
-def choose_asteroid_variant(variation_seed: int) -> tuple[str, str]:
-    """Select deterministic asteroid model and diffuse texture by seed."""
-    variant_index = variation_seed % len(ASTEROID_MODEL_VARIANTS)
-    model_name = ASTEROID_MODEL_VARIANTS[variant_index]
-    return model_name, ASTEROID_DIFFUSE_TEXTURE_BY_MODEL[model_name]
+__all__ = [
+    "spawn_bands_ahead",
+    "spawn_entity_from_blueprint",
+    "update_powerup_spawning",
+]
 
 
 def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
@@ -323,121 +255,6 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
         spawn_time=monotonic(),
         fade_duration=fade_duration,
         target_rgba=target_rgba,
-    )
-
-
-def schedule_next_powerup_spawn(
-    *,
-    run_state: FallingRunState,
-    rng: Random,
-    gameplay_settings: GameplayTuningSettings,
-    now: float,
-) -> None:
-    """Schedule the next powerup spawn time."""
-    jitter = rng.uniform(
-        -gameplay_settings.powerup_spawn_jitter_seconds,
-        gameplay_settings.powerup_spawn_jitter_seconds,
-    )
-    interval = max(4.0, gameplay_settings.powerup_spawn_interval_seconds + jitter)
-    run_state.next_powerup_spawn_at = now + interval
-
-
-def spawn_powerup(  # noqa: PLR0913
-    # pylint: disable=too-many-arguments
-    # R0913: explicit spawn inputs.
-    *,
-    run_state: FallingRunState,
-    player_y: float,
-    rng: Random,
-    fall_settings: FallSettings,
-    movement_settings: MovementSettings,
-    gameplay_settings: GameplayTuningSettings,
-) -> None:
-    """Spawn a single magnet powerup ahead of the player."""
-    spawn_y = player_y - (fall_settings.spawn_ahead_distance * 0.35)
-    max_radius = movement_settings.play_area_radius * 0.6
-    spawn_x = rng.uniform(-max_radius, max_radius)
-    spawn_z = rng.uniform(-max_radius, max_radius)
-    entity_name = f"powerup_magnet_{int(spawn_y)}"
-    entity = Entity(
-        name=entity_name,
-        model=POWERUP_MODEL_NAME,
-        color=POWERUP_BASE_COLOR,
-        scale=Vec3(1.2, 1.2, 1.2),
-        position=Vec3(spawn_x, spawn_y, spawn_z),
-    )
-    entity.unlit = True
-    Entity(
-        parent=entity,
-        name=f"{entity_name}_halo",
-        model=POWERUP_MODEL_NAME,
-        scale=Vec3(1.85, 1.85, 1.85),
-        color=POWERUP_HALO_COLOR,
-        unlit=True,
-    )
-    run_state.spawned_objects.append(
-        SpawnedObject(
-            entity=entity,
-            entity_kind="powerup",
-            color_name="magnet",
-            model_name=POWERUP_MODEL_NAME,
-            collision_radius=4.0,
-            score_value=0,
-            band_index=0,
-            base_x=entity.x,
-            base_y=entity.y,
-            base_z=entity.z,
-            base_scale=Vec3(1.2, 1.2, 1.2),
-            spawn_time=monotonic(),
-            powerup_kind=POWERUP_MAGNET_KIND,
-        ),
-    )
-    schedule_next_powerup_spawn(
-        run_state=run_state,
-        rng=rng,
-        gameplay_settings=gameplay_settings,
-        now=monotonic(),
-    )
-
-
-def update_powerup_spawning(  # noqa: PLR0913
-    # pylint: disable=too-many-arguments
-    # R0913: explicit spawn inputs.
-    *,
-    run_state: FallingRunState,
-    player_y: float,
-    rng: Random,
-    fall_settings: FallSettings,
-    movement_settings: MovementSettings,
-    gameplay_settings: GameplayTuningSettings,
-    now: float,
-) -> None:
-    """Spawn powerups on an independent timer."""
-    if run_state.next_powerup_spawn_at <= 0.0:
-        schedule_next_powerup_spawn(
-            run_state=run_state,
-            rng=rng,
-            gameplay_settings=gameplay_settings,
-            now=now,
-        )
-        spawn_powerup(
-            run_state=run_state,
-            player_y=player_y,
-            rng=rng,
-            fall_settings=fall_settings,
-            movement_settings=movement_settings,
-            gameplay_settings=gameplay_settings,
-        )
-        return
-    if now < run_state.next_powerup_spawn_at:
-        return
-    spawn_powerup(
-        run_state=run_state,
-        player_y=player_y,
-        rng=rng,
-        fall_settings=fall_settings,
-        movement_settings=movement_settings,
-        gameplay_settings=gameplay_settings,
     )
 
 

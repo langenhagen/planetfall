@@ -17,6 +17,7 @@ from planetfall.game.runtime_audio import (
 )
 from planetfall.game.runtime_controls import should_despawn_object
 from planetfall.game.runtime_fx import trigger_impact_rumble
+from planetfall.game.runtime_spawn_powerups import POWERUP_MAGNET_KIND
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -30,7 +31,6 @@ if TYPE_CHECKING:
 
 PLAYER_COLLISION_RADIUS = 0.95
 COIN_COLLECT_ANIMATION_SECONDS = 0.18
-POWERUP_MAGNET_KIND = "magnet"
 
 
 @dataclass(slots=True)
