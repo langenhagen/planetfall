@@ -81,6 +81,7 @@ class GameSettings:  # pylint: disable=too-many-instance-attributes
     # R0902: grouped tuning fields.
     """Settings used to bootstrap and tune the game runtime."""
 
+    run_seed: int | None = None
     window_title: str = "Planetfall"
     borderless: bool = False
     fullscreen: bool = False

@@ -20,7 +20,7 @@ def test_main_calls_run_game(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[object] = []
 
     def fake_parse_args() -> argparse.Namespace:
-        return argparse.Namespace(fullscreen=False, resolution=None)
+        return argparse.Namespace(fullscreen=False, resolution=None, seed=None)
 
     def fake_run_game(*, settings: GameSettings) -> None:
         calls.append(settings)
@@ -37,7 +37,7 @@ def test_main_passes_fullscreen_setting(monkeypatch: pytest.MonkeyPatch) -> None
     captured_fullscreen_values: list[bool] = []
 
     def fake_parse_args() -> argparse.Namespace:
-        return argparse.Namespace(fullscreen=True, resolution=None)
+        return argparse.Namespace(fullscreen=True, resolution=None, seed=None)
 
     def fake_run_game(*, settings: GameSettings) -> None:
         captured_fullscreen_values.append(settings.fullscreen)
@@ -64,7 +64,11 @@ def test_main_passes_resolution_setting(monkeypatch: pytest.MonkeyPatch) -> None
     captured_sizes: list[tuple[int, int] | None] = []
 
     def fake_parse_args() -> argparse.Namespace:
-        return argparse.Namespace(fullscreen=False, resolution="2560x1440")
+        return argparse.Namespace(
+            fullscreen=False,
+            resolution="2560x1440",
+            seed=None,
+        )
 
     def fake_run_game(*, settings: GameSettings) -> None:
         captured_sizes.append(settings.window_size)
@@ -74,3 +78,24 @@ def test_main_passes_resolution_setting(monkeypatch: pytest.MonkeyPatch) -> None
     cli.main()
 
     CHECKER.assertEqual(captured_sizes, [(2560, 1440)])
+
+
+def test_main_passes_run_seed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Forward --seed into runtime settings."""
+    captured_seeds: list[int | None] = []
+
+    def fake_parse_args() -> argparse.Namespace:
+        return argparse.Namespace(
+            fullscreen=False,
+            resolution=None,
+            seed=12345,
+        )
+
+    def fake_run_game(*, settings: GameSettings) -> None:
+        captured_seeds.append(settings.run_seed)
+
+    monkeypatch.setattr("planetfall.cli.parse_args", fake_parse_args)
+    monkeypatch.setattr("planetfall.cli.run_game", fake_run_game)
+    cli.main()
+
+    CHECKER.assertEqual(captured_seeds, [12345])

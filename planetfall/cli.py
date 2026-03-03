@@ -22,6 +22,11 @@ def parse_args() -> argparse.Namespace:
         type=str,
         help="Window resolution as WIDTHxHEIGHT (example: 1920x1080)",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        help="Seed for deterministic run generation",
+    )
     return parser.parse_args()
 
 
@@ -55,6 +60,7 @@ def main() -> None:
         raise SystemExit(str(exc)) from exc
     run_game(
         settings=GameSettings(
+            run_seed=args.seed,
             fullscreen=args.fullscreen,
             window_size=window_size,
         ),

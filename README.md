@@ -20,6 +20,7 @@ uv sync
 uv run planetfall               # launch the game
 uv run planetfall --fullscreen  # launch the game in fullscreen mode
 uv run planetfall --help        # show command help
+uv run planetfall --seed 12345  # launch with a deterministic run seed
 ```
 
 ## Controls

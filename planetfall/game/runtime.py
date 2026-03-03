@@ -455,8 +455,9 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
     boost_state: dict[str, Audio | None] = {"track": None}
     controller = Entity(name="fall_game_controller")
     hit_flash = create_hit_flash()
+    run_seed = RUN_RANDOM_SEED if settings.run_seed is None else settings.run_seed
     # S311: non-crypto RNG; B311: gameplay seed.
-    randomizer = Random(RUN_RANDOM_SEED)  # noqa: S311  # nosec B311
+    randomizer = Random(run_seed)  # noqa: S311  # nosec B311
     camera_state = CameraState(
         yaw_angle=0.0,
         pitch_angle=settings.camera.start_pitch,
@@ -474,7 +475,7 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
         nonlocal music_track_path
         destroy_spawned_objects(run_state.spawned_objects)
         initialize_run_state(run_state, settings.fall)
-        randomizer.seed(RUN_RANDOM_SEED)
+        randomizer.seed(run_seed)
         player.position = Vec3(0.0, 0.0, 0.0)
         player.rotation = Vec3(0.0, 0.0, 0.0)
         motion_state.horizontal_speed = 0.0
