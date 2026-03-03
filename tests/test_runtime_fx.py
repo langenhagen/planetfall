@@ -3,7 +3,7 @@
 from unittest import TestCase
 from unittest.mock import patch
 
-from planetfall.game.runtime_fx import trigger_impact_rumble
+from planetfall.game.runtime_fx import create_hit_flash, trigger_impact_rumble
 
 CHECKER = TestCase()
 
@@ -48,3 +48,10 @@ def test_trigger_impact_rumble_ignores_vibrate_failures() -> None:
         return_value=broken_vibrate,
     ):
         trigger_impact_rumble(intensity=0.3)
+
+
+def test_create_hit_flash_defaults() -> None:
+    """Flash overlay should start disabled and transparent."""
+    flash = create_hit_flash()
+    CHECKER.assertEqual(flash.enabled, False)
+    CHECKER.assertEqual(flash.color.a, 0.0)

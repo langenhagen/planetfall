@@ -8,6 +8,8 @@ from contextlib import suppress
 from functools import lru_cache
 from typing import Protocol, cast
 
+from ursina import Entity, Vec3, camera, color
+
 
 class GamepadVibrateCallable(Protocol):  # pylint: disable=too-few-public-methods
     # R0903: protocol is single-call hook.
@@ -42,3 +44,16 @@ def trigger_impact_rumble(intensity: float) -> None:
             high_freq_motor=max(0.2, min(1.0, intensity + 0.1)),
             duration=0.09,
         )
+
+
+def create_hit_flash() -> Entity:
+    """Create a full-screen flash overlay for obstacle impacts."""
+    return Entity(
+        name="hit_flash_overlay",
+        parent=camera.ui,
+        model="quad",
+        scale=Vec3(2.0, 2.0, 1.0),
+        color=color.rgba(255, 255, 255, 0),
+        enabled=False,
+        z=-1.0,
+    )

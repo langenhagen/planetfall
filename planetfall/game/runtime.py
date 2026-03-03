@@ -73,6 +73,7 @@ from planetfall.game.runtime_entities import (
     create_player_visual_state,
     spawn_player_avatar,
 )
+from planetfall.game.runtime_fx import create_hit_flash
 from planetfall.game.runtime_postfx import next_post_process_option, toggle_render_mode
 from planetfall.game.runtime_random import deterministic_probability_hit
 from planetfall.game.runtime_spawn import (
@@ -453,6 +454,7 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
     music_track_path: Path | None = None
     boost_state: dict[str, Audio | None] = {"track": None}
     controller = Entity(name="fall_game_controller")
+    hit_flash = create_hit_flash()
     # S311: non-crypto RNG; B311: gameplay seed.
     randomizer = Random(RUN_RANDOM_SEED)  # noqa: S311  # nosec B311
     camera_state = CameraState(
@@ -510,11 +512,15 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
             fall_speed=settings.fall.base_speed,
         )
         update_status_text(run_state, status_text)
+        hit_flash.enabled = False
+        hit_flash.color = rgba_color(1.0, 1.0, 1.0, 0.0)
 
     reset_run()
 
     # C901: too-complex; per-frame flow.
-    def controller_update() -> None:  # noqa: C901, PLR0915
+    # PLR0912: too-many-branches; per-frame flow keeps explicit phases.
+    # pylint: disable=too-many-branches
+    def controller_update() -> None:  # noqa: C901, PLR0912, PLR0915
         nonlocal music_track_path
         held = cast("dict[str, float]", getattr(ursina, "held_keys", {}))
         mouse_velocity = cast("Vec3", getattr(mouse, "velocity", Vec3(0.0, 0.0, 0.0)))
@@ -558,6 +564,7 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
                 dt=0.0,
             )
             player.rotation_y = camera_state.yaw_angle
+            hit_flash.enabled = False
             return
 
         if run_state.is_paused:
@@ -602,6 +609,7 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
                 dt=dt,
             )
             update_status_text(run_state, status_text)
+            hit_flash.enabled = False
             return
 
         camera_state.yaw_angle, camera_state.pitch_angle = compute_look_angles(
@@ -693,6 +701,7 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
             run_state=run_state,
             fall_settings=settings.fall,
             gameplay_settings=settings.gameplay,
+            hit_flash=hit_flash,
         )
         cleanup_passed_objects(
             run_state=run_state,
@@ -731,6 +740,15 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
             fall_speed=fall_speed,
         )
         update_status_text(run_state, status_text)
+        hit_flash_alpha = 0.0
+        if run_state.hit_flash_expires_at > 0.0:
+            flash_remaining = max(0.0, run_state.hit_flash_expires_at - monotonic())
+            flash_duration = settings.gameplay.obstacle_hit_cooldown_seconds
+            if flash_remaining > 0.0 and flash_duration > 0.0:
+                hit_flash_alpha = min(0.45, flash_remaining / flash_duration)
+        hit_flash.enabled = hit_flash_alpha > 0.0
+        if hit_flash.enabled:
+            hit_flash.color = rgba_color(1.0, 1.0, 1.0, hit_flash_alpha)
 
     # C901: too-complex; input branching.
     def controller_input(key: str) -> None:  # noqa: C901

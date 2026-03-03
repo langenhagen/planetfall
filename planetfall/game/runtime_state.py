@@ -86,6 +86,7 @@ class FallingRunState:  # pylint: disable=too-many-instance-attributes
     next_band_index: int = 0
     next_band_y: float = 0.0
     last_hit_time: float = 0.0
+    hit_flash_expires_at: float = 0.0
     spawned_objects: list[SpawnedObject] = field(default_factory=list)
     coin_pattern_index: int = 0
     coin_pattern_start_y: float = 0.0

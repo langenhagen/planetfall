@@ -11,6 +11,7 @@ def test_falling_run_state_starts_empty() -> None:
     """Default run state should start with no spawned objects."""
     run_state = FallingRunState()
     CHECKER.assertEqual(run_state.spawned_objects, [])
+    CHECKER.assertEqual(run_state.hit_flash_expires_at, 0.0)
 
 
 class _TestEntity:  # pylint: disable=too-few-public-methods

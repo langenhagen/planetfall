@@ -16,7 +16,7 @@ from planetfall.game.runtime_audio import (
     play_powerup_pickup_sfx,
 )
 from planetfall.game.runtime_controls import should_despawn_object
-from planetfall.game.runtime_fx import trigger_impact_rumble
+from planetfall.game.runtime_fx import create_hit_flash, trigger_impact_rumble
 from planetfall.game.runtime_spawn_powerups import POWERUP_MAGNET_KIND
 
 if TYPE_CHECKING:
@@ -43,6 +43,7 @@ class CollisionContext:
     fall_settings: FallSettings
     gameplay_settings: GameplayTuningSettings
     now: float
+    hit_flash: Entity | None
 
 
 def _compute_collision_hits(
@@ -126,6 +127,15 @@ def _handle_obstacle_collision(
 
     destroy_entity_tree(spawned.entity)
     ctx.run_state.last_hit_time = ctx.now
+    ctx.run_state.hit_flash_expires_at = max(
+        ctx.run_state.hit_flash_expires_at,
+        ctx.now + ctx.gameplay_settings.obstacle_hit_cooldown_seconds,
+    )
+    hit_flash = ctx.hit_flash
+    if hit_flash is None:
+        hit_flash = create_hit_flash()
+        ctx.hit_flash = hit_flash
+    hit_flash.enabled = True
     ctx.run_state.reset_count += 1
     ctx.run_state.score = max(
         0,
@@ -166,13 +176,16 @@ def _should_handle_collision(
     return bool(hits[index])
 
 
-def process_collisions(
+# PLR0913: too-many-arguments; explicit runtime inputs.
+def process_collisions(  # noqa: PLR0913
+    # pylint: disable=too-many-arguments
     *,
     player: Entity,
     motion_state: MotionState,
     run_state: FallingRunState,
     fall_settings: FallSettings,
     gameplay_settings: GameplayTuningSettings,
+    hit_flash: Entity | None = None,
 ) -> None:
     """Handle collisions with coins and obstacles for score and reset behavior."""
     now = monotonic()
@@ -183,6 +196,7 @@ def process_collisions(
         fall_settings=fall_settings,
         gameplay_settings=gameplay_settings,
         now=now,
+        hit_flash=hit_flash,
     )
     survivors: list[SpawnedObject] = []
     spawned_objects = run_state.spawned_objects
