@@ -102,34 +102,34 @@ from planetfall.game.scene import (
 
 PLAYER_COLLISION_RADIUS = 0.95
 RUN_RANDOM_SEED = 20260224
-ASTEROID_MODEL_NAME = "models/asteroids/Asteroid_1.obj"
+ASTEROID_MODEL_NAME = "models/asteroids/Asteroid_1.bam"
 POWERUP_MODEL_NAME = "icosphere"
 POWERUP_MAGNET_KIND = "magnet"
 ASTEROID_MODEL_VARIANTS: tuple[str, ...] = (
-    "models/asteroids/Asteroid_1.obj",
-    "models/asteroids/Rocky_Asteroid_2.obj",
-    "models/asteroids/Rocky_Asteroid_3.obj",
-    "models/asteroids/Rocky_Asteroid_4.obj",
-    "models/asteroids/Rocky_Asteroid_5.obj",
-    "models/asteroids/Rocky_Asteroid_6.obj",
+    "models/asteroids/Asteroid_1.bam",
+    "models/asteroids/Rocky_Asteroid_2.bam",
+    "models/asteroids/Rocky_Asteroid_3.bam",
+    "models/asteroids/Rocky_Asteroid_4.bam",
+    "models/asteroids/Rocky_Asteroid_5.bam",
+    "models/asteroids/Rocky_Asteroid_6.bam",
 )
 ASTEROID_DIFFUSE_TEXTURE_BY_MODEL: dict[str, str] = {
-    "models/asteroids/Asteroid_1.obj": (
+    "models/asteroids/Asteroid_1.bam": (
         "models/asteroids/Textures_Asteroid_1/Asteroid_1_Diffuse_1K.png"
     ),
-    "models/asteroids/Rocky_Asteroid_2.obj": (
+    "models/asteroids/Rocky_Asteroid_2.bam": (
         "models/asteroids/Textures_Rocky_Asteroid_2/Rocky_Asteroid_2_Diffuse_1K.png"
     ),
-    "models/asteroids/Rocky_Asteroid_3.obj": (
+    "models/asteroids/Rocky_Asteroid_3.bam": (
         "models/asteroids/Textures_Rocky_Asteroid_3/Rocky_Asteroid_3_Diffuse_1K.png"
     ),
-    "models/asteroids/Rocky_Asteroid_4.obj": (
+    "models/asteroids/Rocky_Asteroid_4.bam": (
         "models/asteroids/Textures_Rocky_Asteroid_4/Rocky_Asteroid_4_Diffuse_1K.png"
     ),
-    "models/asteroids/Rocky_Asteroid_5.obj": (
+    "models/asteroids/Rocky_Asteroid_5.bam": (
         "models/asteroids/Textures_Rocky_Asteroid_5/Rocky_Asteroid_5_Diffuse_1K.png"
     ),
-    "models/asteroids/Rocky_Asteroid_6.obj": (
+    "models/asteroids/Rocky_Asteroid_6.bam": (
         "models/asteroids/Textures_Rocky_Asteroid_6/Rocky_Asteroid_6_Diffuse_1K.png"
     ),
 }
@@ -456,7 +456,7 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
             )
             if blueprint.model == ASTEROID_MODEL_NAME:
                 target_color = resolve_color("white")
-                entity.unlit = True
+                entity.unlit = False
                 entity.rotation_x = (variation_seed * 37) % 360
                 entity.rotation_y = (variation_seed * 53) % 360
                 entity.rotation_z = (variation_seed * 29) % 360

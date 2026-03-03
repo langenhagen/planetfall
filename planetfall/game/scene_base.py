@@ -33,8 +33,8 @@ PATTERN_SCATTER = 8
 PATH_DIRECTION_EPSILON = 1e-4
 RING_GAP_ANGLE_THRESHOLD = 0.52  # Angular width of the safe opening in ring patterns.
 BONUS_ARC_SIDE_SPLIT = 0.5  # 50/50 chance for bonus arc on left or right side.
-OBSTACLE_MODEL_NAME = "models/asteroids/Asteroid_1.obj"  # Asteroid hazards.
-COIN_MODEL_NAME = "models/coins/coin.obj"  # Asset-backed coin pickup model.
+OBSTACLE_MODEL_NAME = "models/asteroids/Asteroid_1.bam"  # Asteroid hazards.
+COIN_MODEL_NAME = "models/coins/coin.bam"  # Asset-backed coin pickup model.
 COIN_CHAIN_FORWARD_OFFSET = 2.2  # Forward/back spacing within coin pickup line.
 COIN_CHAIN_SIDE_OFFSET = 1.9  # Side coin offset for optional fourth pickup.
 

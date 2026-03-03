@@ -55,10 +55,10 @@ Ursina exposes standard gamepad names, so PS5 controls map as:
 
 ## Project Layout
 
-- [`pyproject.toml`](pyproject.toml): project metadata and tool/lint configuration
-- [`planetfall/`](planetfall/): application package and CLI entrypoint
-- [`planetfall/game/`](planetfall/game/): runtime, control logic, procedural falling-scene generation
-- [`tests/`](tests/): test suite
+- [pyproject.toml](pyproject.toml): project metadata and tool/lint configuration
+- [planetfall/](planetfall/): application package and CLI entrypoint
+- [planetfall/game/](planetfall/game/): runtime, control logic, procedural falling-scene generation
+- [tests/](tests/): test suite
 
 ## Full Setup and Checks
 
@@ -90,10 +90,10 @@ uv run pre-commit run --all-files
 
 Tooling that helps automating AI-testing and debugging of the game.
 
-- [`scripts/capture-window.sh`](scripts/capture-window.sh): generic X11 window screenshot capture tool.
+- [scripts/capture-window.sh](scripts/capture-window.sh): generic X11 window screenshot capture tool.
   - Capture any window by name or id at a fixed interval.
   - Outputs numbered+timestamped frames to a target directory.
-- [`scripts/capture-game.sh`](scripts/capture-game.sh): game-focused wrapper around `capture-window.sh`.
+- [scripts/capture-game.sh](scripts/capture-game.sh): game-focused wrapper around `capture-window.sh`.
   - Targets `ursina` window names automatically.
   - Writes to `__debug/drive_run_YYYY-MM-DD-HH-MM-SS/` with:
     - `screens/` (captured frames)
@@ -118,23 +118,15 @@ fall scenarios and visual debugging. Just saying.
 
 ## Asset Conversion Scripts
 
-The project uses specific file formats for its assets. Convert your audio and images
-with following scripts:
-
-- [scripts/convert-assets.sh](scripts/convert-assets.sh): run all asset converters in one pass.
-- [scripts/convert-audio-sfx-to-wav.sh](scripts/convert-audio-sfx-to-wav.sh): convert SFX under
-  [`assets/audio/sfx/`](assets/audio/sfx/).
-- [scripts/convert-audio-background-music-to-ogg.sh](scripts/convert-audio-background-music-to-ogg.sh):
-  convert music under [`assets/audio/music/`](assets/audio/music/).
-- [scripts/convert-skyboxes-to-txo.py](scripts/convert-skyboxes-to-txo.py): convert skybox textures
-  under [`assets/sky/`](assets/sky/).
+See [assets/README.md](assets/README.md) for asset layout and conversion
+scripts.
 
 ## Glossary
 
 Terms used in the game and its code.
 
 - **Band**: one vertical slice of the falling course that gets spawned at a time.
-- **Blueprint**: a data-only spawn description (see `FallingBlueprint`).
+- **Blueprint**: a data-only spawn description (see [FallingBlueprint](planetfall/game/scene.py)).
 - **Coin pattern**: the coin layout used for a band.
 - **Obstacle pattern**: the asteroid layout used for a band.
 - **Band spacing**: vertical distance between bands, used for spawn cadence.

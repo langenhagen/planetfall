@@ -104,7 +104,7 @@ def test_bonus_arc_contains_high_value_coins() -> None:
 
 
 def test_obstacles_use_asteroid_model_asset() -> None:
-    """Spawn obstacle blueprints using the imported asteroid OBJ asset."""
+    """Spawn obstacle blueprints using the imported asteroid BAM asset."""
     blueprints = build_fall_band_blueprints(
         band_index=2,
         y_position=-90.0,
@@ -119,7 +119,7 @@ def test_obstacles_use_asteroid_model_asset() -> None:
 
 
 def test_coins_use_coin_model_asset() -> None:
-    """Spawn coin blueprints using the imported coin OBJ asset."""
+    """Spawn coin blueprints using the imported coin BAM asset."""
     blueprints = build_fall_band_blueprints(
         band_index=2,
         y_position=-90.0,
