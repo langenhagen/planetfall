@@ -1,4 +1,4 @@
-"""Tests for runtime collision recovery behavior."""
+"""Tests for runtime collision helpers."""
 
 from dataclasses import dataclass, field
 from time import monotonic
@@ -53,6 +53,43 @@ def test_apply_obstacle_recovery_lifts_player_and_damps_speed() -> None:
     CHECKER.assertEqual(player.y, -168.0)
     CHECKER.assertEqual(motion_state.horizontal_speed, 1.5)
     CHECKER.assertEqual(motion_state.depth_speed, -0.8)
+
+
+def test_process_collisions_marks_coin_for_collect_animation() -> None:
+    """Convert coin collisions into short collect animations before destroy."""
+    player = cast("Entity", DummyEntity(position=Vec3(0.0, 0.0, 0.0)))
+    coin_entity = cast("Entity", DummyEntity(position=Vec3(0.6, 0.0, 0.0)))
+    spawned_coin = SpawnedObject(
+        entity=coin_entity,
+        entity_kind="coin",
+        color_name="yellow",
+        model_name="models/coins/coin.bam",
+        collision_radius=0.7,
+        score_value=10,
+        band_index=0,
+        base_scale=Vec3(1.0, 1.0, 1.0),
+    )
+    run_state = FallingRunState(spawned_objects=[spawned_coin])
+
+    with (
+        patch("planetfall.game.runtime_collisions.destroy_entity_tree") as destroy_mock,
+        patch("planetfall.game.runtime_collisions.play_coin_pickup_sfx") as sfx_mock,
+    ):
+        process_collisions(
+            player=player,
+            motion_state=MotionState(),
+            run_state=run_state,
+            fall_settings=FallSettings(),
+            gameplay_settings=GameplayTuningSettings(),
+        )
+
+    CHECKER.assertFalse(destroy_mock.called)
+    CHECKER.assertTrue(sfx_mock.called)
+    CHECKER.assertEqual(run_state.collected_coins, 1)
+    CHECKER.assertEqual(run_state.score, 10)
+    CHECKER.assertEqual(len(run_state.spawned_objects), 1)
+    CHECKER.assertTrue(run_state.spawned_objects[0].is_collecting)
+    CHECKER.assertEqual(run_state.spawned_objects[0].collision_radius, 0.0)
 
 
 def test_process_collisions_keeps_obstacle_during_hit_cooldown() -> None:

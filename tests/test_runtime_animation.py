@@ -1,4 +1,4 @@
-"""Tests for runtime coin pickup and collection animation behavior."""
+"""Tests for runtime animation helpers."""
 
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast
@@ -7,13 +7,11 @@ from unittest.mock import patch
 
 from ursina import Vec3
 
-from planetfall.game.config import FallSettings, GameplayTuningSettings
+from planetfall.game.config import GameplayTuningSettings
 from planetfall.game.runtime import (
     FallingRunState,
-    MotionState,
     SpawnedObject,
     animate_spawned_objects,
-    process_collisions,
 )
 
 if TYPE_CHECKING:
@@ -24,7 +22,7 @@ CHECKER = TestCase()
 
 @dataclass(slots=True)
 class DummyEntity:
-    """Minimal entity-like object used for coin collision/animation tests."""
+    """Minimal entity-like object used for animation tests."""
 
     position: Vec3
     rotation_y: float = 0.0
@@ -57,43 +55,6 @@ class DummyEntity:
     @z.setter
     def z(self, value: float) -> None:
         self.position.z = value
-
-
-def test_process_collisions_marks_coin_for_collect_animation() -> None:
-    """Convert coin collisions into short collect animations before destroy."""
-    player = cast("Entity", DummyEntity(position=Vec3(0.0, 0.0, 0.0)))
-    coin_entity = cast("Entity", DummyEntity(position=Vec3(0.6, 0.0, 0.0)))
-    spawned_coin = SpawnedObject(
-        entity=coin_entity,
-        entity_kind="coin",
-        color_name="yellow",
-        model_name="models/coins/coin.bam",
-        collision_radius=0.7,
-        score_value=10,
-        band_index=0,
-        base_scale=Vec3(1.0, 1.0, 1.0),
-    )
-    run_state = FallingRunState(spawned_objects=[spawned_coin])
-
-    with (
-        patch("planetfall.game.runtime_collisions.destroy_entity_tree") as destroy_mock,
-        patch("planetfall.game.runtime_collisions.play_coin_pickup_sfx") as sfx_mock,
-    ):
-        process_collisions(
-            player=player,
-            motion_state=MotionState(),
-            run_state=run_state,
-            fall_settings=FallSettings(),
-            gameplay_settings=GameplayTuningSettings(),
-        )
-
-    CHECKER.assertFalse(destroy_mock.called)
-    CHECKER.assertTrue(sfx_mock.called)
-    CHECKER.assertEqual(run_state.collected_coins, 1)
-    CHECKER.assertEqual(run_state.score, 10)
-    CHECKER.assertEqual(len(run_state.spawned_objects), 1)
-    CHECKER.assertTrue(run_state.spawned_objects[0].is_collecting)
-    CHECKER.assertEqual(run_state.spawned_objects[0].collision_radius, 0.0)
 
 
 def test_animate_spawned_objects_destroys_coin_after_collect_animation() -> None:
