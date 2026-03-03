@@ -121,23 +121,19 @@ def animate_spawned_objects(  # noqa: C901, PLR0912, PLR0915
             continue
 
         if spawned.entity_kind == "coin":
+            magnet_in_range = False
+            magnet_offset = Vec3(0.0, 0.0, 0.0)
+            magnet_distance = 0.0
+            magnet_radius = gameplay_settings.magnet_radius
             if magnet_active:
-                magnet_strength = gameplay_settings.magnet_strength
-                magnet_radius = gameplay_settings.magnet_radius
-                offset = player_position - spawned.entity.position
-                distance = max(0.01, offset.length())
-                if distance <= magnet_radius:
-                    pull_strength = 1.0 - (distance / magnet_radius)
-                    pull_distance = magnet_strength * pull_strength * dt
-                    pull_distance = min(pull_distance, distance)
-                    spawned.entity.position += offset.normalized() * pull_distance
-                    spawned.entity.rotation_y += 140.0 * dt
-                    spawned.entity.scale = Vec3(
-                        max(MIN_ENTITY_SCALE, spawned.base_scale.x * 1.12),
-                        max(MIN_ENTITY_SCALE, spawned.base_scale.y * 1.12),
-                        max(MIN_ENTITY_SCALE, spawned.base_scale.z * 1.12),
-                    )
-            if spawned.motion_kind and not spawned.is_collecting:
+                magnet_offset = player_position - spawned.entity.position
+                magnet_distance = max(0.01, magnet_offset.length())
+                magnet_in_range = magnet_distance <= magnet_radius
+            if (
+                spawned.motion_kind
+                and not spawned.is_collecting
+                and not magnet_in_range
+            ):
                 if spawned.motion_kind == "lane_wave":
                     sway = sin(
                         (runtime_time * spawned.motion_frequency)
@@ -207,6 +203,21 @@ def animate_spawned_objects(  # noqa: C901, PLR0912, PLR0915
                     max(MIN_ENTITY_SCALE, spawned.base_scale.y * pulse_scale),
                     max(MIN_ENTITY_SCALE, spawned.base_scale.z * pulse_scale),
                 )
+            if magnet_active:
+                magnet_strength = gameplay_settings.magnet_strength
+                if magnet_in_range:
+                    pull_strength = 1.0 - (magnet_distance / magnet_radius)
+                    pull_distance = magnet_strength * pull_strength * dt
+                    pull_distance = min(pull_distance, magnet_distance)
+                    spawned.entity.position += (
+                        magnet_offset.normalized() * pull_distance
+                    )
+                    spawned.entity.rotation_y += 140.0 * dt
+                    spawned.entity.scale = Vec3(
+                        max(MIN_ENTITY_SCALE, spawned.base_scale.x * 1.12),
+                        max(MIN_ENTITY_SCALE, spawned.base_scale.y * 1.12),
+                        max(MIN_ENTITY_SCALE, spawned.base_scale.z * 1.12),
+                    )
             survivors.append(spawned)
             continue
 
