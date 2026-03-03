@@ -220,6 +220,7 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
         pulse_frequency = 4.2 + ((variation_seed % 4) * 0.48)
     else:
         mark_lit_shadowed(entity)
+        should_spin = False
         if blueprint.entity_kind == "obstacle":
             should_spin = deterministic_probability_hit(
                 seed=variation_seed + 3,

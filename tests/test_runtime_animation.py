@@ -29,7 +29,7 @@ class DummyEntity:
     """Minimal entity-like object used for animation tests."""
 
     position: Vec3
-    rotation_y: float = 0.0
+    _rotation_y: float = 0.0
     scale: Vec3 = field(default_factory=lambda: Vec3(1.0, 1.0, 1.0))
     children: list[object] = field(default_factory=list)
 
@@ -59,6 +59,15 @@ class DummyEntity:
     @z.setter
     def z(self, value: float) -> None:
         self.position.z = value
+
+    @property
+    def rotation_y(self) -> float:
+        """Expose rotation_y like a real Ursina entity."""
+        return self._rotation_y
+
+    @rotation_y.setter
+    def rotation_y(self, value: float) -> None:
+        self._rotation_y = value
 
 
 def test_animate_spawned_objects_destroys_coin_after_collect_animation() -> None:
