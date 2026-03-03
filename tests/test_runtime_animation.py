@@ -17,6 +17,10 @@ from planetfall.game.runtime import (
     SpawnedObject,
     animate_spawned_objects,
 )
+from planetfall.game.runtime_animation import (
+    NUMPY_ANIMATION_BATCH_MIN,
+    NUMPY_OBSTACLE_BATCH_MIN,
+)
 
 if TYPE_CHECKING:
     from ursina import Entity
@@ -30,6 +34,8 @@ class DummyEntity:
 
     position: Vec3
     _rotation_y: float = 0.0
+    _rotation_x: float = 0.0
+    _rotation_z: float = 0.0
     scale: Vec3 = field(default_factory=lambda: Vec3(1.0, 1.0, 1.0))
     children: list[object] = field(default_factory=list)
 
@@ -68,6 +74,24 @@ class DummyEntity:
     @rotation_y.setter
     def rotation_y(self, value: float) -> None:
         self._rotation_y = value
+
+    @property
+    def rotation_x(self) -> float:
+        """Expose rotation_x like a real Ursina entity."""
+        return self._rotation_x
+
+    @rotation_x.setter
+    def rotation_x(self, value: float) -> None:
+        self._rotation_x = value
+
+    @property
+    def rotation_z(self) -> float:
+        """Expose rotation_z like a real Ursina entity."""
+        return self._rotation_z
+
+    @rotation_z.setter
+    def rotation_z(self, value: float) -> None:
+        self._rotation_z = value
 
 
 def test_animate_spawned_objects_destroys_coin_after_collect_animation() -> None:
@@ -160,3 +184,88 @@ def test_magnet_pull_overrides_lane_motion_in_range() -> None:
 
     CHECKER.assertGreater(coin_entity.position.x, 0.0)
     CHECKER.assertEqual(coin_entity.position.z, 0.0)
+
+
+def test_batch_coin_animation_updates_positions() -> None:
+    """Batch path updates coin positions for large batches."""
+    coins: list[SpawnedObject] = []
+    for index in range(NUMPY_ANIMATION_BATCH_MIN):
+        coin_entity = cast(
+            "Entity",
+            DummyEntity(position=Vec3(float(index), 0.0, 0.0)),
+        )
+        coins.append(
+            SpawnedObject(
+                entity=coin_entity,
+                entity_kind="coin",
+                color_name="yellow",
+                model_name="models/coins/coin.bam",
+                collision_radius=0.7,
+                score_value=5,
+                band_index=0,
+                base_scale=Vec3(1.0, 1.0, 1.0),
+                motion_kind="lane_wave",
+                motion_amplitude=2.0,
+                motion_frequency=1.0,
+                motion_phase=0.0,
+                base_x=float(index),
+                base_y=0.0,
+                base_z=0.0,
+            ),
+        )
+    run_state = FallingRunState(spawned_objects=coins)
+
+    with patch("planetfall.game.runtime_animation.monotonic", return_value=1.0):
+        animate_spawned_objects(
+            run_state=run_state,
+            gameplay_settings=GameplayTuningSettings(),
+            dt=0.1,
+            player_y=0.0,
+            player_position=Vec3(0.0, 0.0, 0.0),
+        )
+
+    CHECKER.assertNotEqual(run_state.spawned_objects[0].entity.x, 0.0)
+
+
+def test_batch_obstacle_animation_updates_drift_and_spin() -> None:
+    """Batch path updates obstacle rotations and drift."""
+    obstacles: list[SpawnedObject] = []
+    for index in range(NUMPY_OBSTACLE_BATCH_MIN):
+        obstacle_entity = cast(
+            "Entity",
+            DummyEntity(position=Vec3(float(index), 0.0, 0.0)),
+        )
+        obstacles.append(
+            SpawnedObject(
+                entity=obstacle_entity,
+                entity_kind="obstacle",
+                color_name="gray",
+                model_name="cube",
+                collision_radius=1.0,
+                score_value=0,
+                band_index=0,
+                spin_speed_x=10.0,
+                spin_speed_y=15.0,
+                spin_speed_z=20.0,
+                drift_speed_x=1.2,
+                drift_speed_z=-0.6,
+                base_x=float(index),
+                base_y=0.0,
+                base_z=0.0,
+            ),
+        )
+    run_state = FallingRunState(spawned_objects=obstacles)
+
+    animate_spawned_objects(
+        run_state=run_state,
+        gameplay_settings=GameplayTuningSettings(),
+        dt=0.2,
+        player_y=0.0,
+        player_position=Vec3(0.0, 0.0, 0.0),
+    )
+
+    first = run_state.spawned_objects[0].entity
+    CHECKER.assertNotEqual(first.rotation_x, 0.0)
+    CHECKER.assertNotEqual(first.rotation_y, 0.0)
+    CHECKER.assertNotEqual(first.rotation_z, 0.0)
+    CHECKER.assertNotEqual(first.x, 0.0)
