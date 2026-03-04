@@ -788,8 +788,14 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
         )
         perf_tracker.record("animate", monotonic() - animation_start)
         perf_tracker.set_gauge("spawned", float(len(run_state.spawned_objects)))
-        if dt > 0.0:
-            perf_tracker.set_gauge("fps", 1.0 / dt)
+        dt_unscaled = cast("float", getattr(ursina.time, "dt_unscaled", dt))
+        if dt_unscaled > 0.0:
+            perf_tracker.record_sample("fps", 1.0 / dt_unscaled)
+        fps_counter = getattr(window, "fps_counter", None)
+        if fps_counter is not None:
+            fps_text = cast("str", getattr(fps_counter, "text", ""))
+            if fps_text.isdigit():
+                perf_tracker.record_sample("fps_ursina", float(fps_text))
         collision_start = monotonic()
         process_collisions(
             player=player,
