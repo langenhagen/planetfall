@@ -57,6 +57,7 @@ Prefer repo-local, reproducible commands:
 - Install hooks: `uv run pre-commit install`.
 - Fast iteration: `uv run pre-commit run`, use liberally.
 - Run hooks manually on all files: `uv run pre-commit run --all-files`.
+- Append perf/behavior or other experiments and decisions to `DEV_LOG.md`.
 - For shell scripts:
   - `shellcheck -x --exclude SC2059 <path/to/script.sh>`
   - `shfmt --indent 4 --write <path/to/script.sh>`

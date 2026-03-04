@@ -64,6 +64,7 @@ Ursina exposes standard gamepad names, so PS5 controls map as:
 - [planetfall/](planetfall/): application package and CLI entrypoint
 - [planetfall/game/](planetfall/game/): runtime, control logic, procedural falling-scene generation
 - [tests/](tests/): test suite
+- [DEV_LOG.md](DEV_LOG.md): short record of experiments and decisions
 
 ## Full Setup and Checks
 
