@@ -59,6 +59,7 @@ class SpawnedObject:  # pylint: disable=too-many-instance-attributes
     drift_progress: float = 0.0
     drift_blend: float = 0.0
     motion_kind: str = ""
+    motion_kind_index: int = 0
     motion_amplitude: float = 0.0
     motion_frequency: float = 0.0
     motion_phase: float = 0.0

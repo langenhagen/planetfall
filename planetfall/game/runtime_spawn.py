@@ -13,7 +13,11 @@ from planetfall.game.runtime_random import (
     discrete_value_in_range,
     signed_speed_from_seed,
 )
-from planetfall.game.runtime_spawn_coins import rainbow_lane_rgb, rainbow_wave_rgb
+from planetfall.game.runtime_spawn_coins import (
+    MOTION_KIND_INDEX_BY_NAME,
+    rainbow_lane_rgb,
+    rainbow_wave_rgb,
+)
 from planetfall.game.runtime_spawn_obstacles import (
     ASTEROID_MODEL_NAME,
     ASTEROID_SCALE_MAX,
@@ -249,6 +253,10 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
         drift_progress=0.0,
         base_scale=base_scale,
         motion_kind=blueprint.motion_kind,
+        motion_kind_index=MOTION_KIND_INDEX_BY_NAME.get(
+            blueprint.motion_kind,
+            0,
+        ),
         motion_amplitude=blueprint.motion_amplitude,
         motion_frequency=blueprint.motion_frequency,
         motion_phase=blueprint.motion_phase,

@@ -5,9 +5,17 @@ from math import sin, tau
 from planetfall.game.scene_base import MAX_COIN_ABS
 
 __all__ = [
+    "MOTION_KIND_INDEX_BY_NAME",
     "rainbow_lane_rgb",
     "rainbow_wave_rgb",
 ]
+
+MOTION_KIND_INDEX_BY_NAME: dict[str, int] = {
+    "": 0,
+    "lane_wave": 1,
+    "lane_orbit": 2,
+    "lane_slalom": 3,
+}
 
 
 def rainbow_lane_rgb(lane_x: float) -> tuple[float, float, float]:

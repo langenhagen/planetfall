@@ -25,6 +25,99 @@ ANIMATION_CULL_DISTANCE = 170.0
 OBSTACLE_ANIMATION_CULL_DISTANCE = ANIMATION_CULL_DISTANCE * 3.0
 COIN_ANIMATION_CULL_DISTANCE = ANIMATION_CULL_DISTANCE * 2.0
 MIN_ENTITY_SCALE = 0.02
+MOTION_KIND_NONE = 0
+MOTION_KIND_WAVE = 1
+MOTION_KIND_ORBIT = 2
+MOTION_KIND_SLALOM = 3
+
+
+class CoinBatchScratch:
+    """Reusable scratch buffers for coin batch animation math."""
+
+    def __init__(self, size: int) -> None:
+        """Allocate reusable arrays for the given coin batch size."""
+        self.size = size
+        self.positions: NDArray[np.float64] = np.empty((size, 3), dtype=np.float64)
+        self.base_x: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.base_y: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.base_z: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.motion_frequency: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.motion_phase: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.motion_amplitude: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.bob_frequency: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.bob_amplitude: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.pulse_frequency: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.pulse_amplitude: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.motion_kind_index: NDArray[np.int8] = np.empty(size, dtype=np.int8)
+        self.has_motion: NDArray[np.bool_] = np.empty(size, dtype=bool)
+        self.is_wave: NDArray[np.bool_] = np.empty(size, dtype=bool)
+        self.is_orbit: NDArray[np.bool_] = np.empty(size, dtype=bool)
+        self.is_slalom: NDArray[np.bool_] = np.empty(size, dtype=bool)
+        self.motion_mask: NDArray[np.bool_] = np.empty(size, dtype=bool)
+        self.wave_mask: NDArray[np.bool_] = np.empty(size, dtype=bool)
+        self.orbit_mask: NDArray[np.bool_] = np.empty(size, dtype=bool)
+        self.slalom_mask: NDArray[np.bool_] = np.empty(size, dtype=bool)
+        self.bob_mask: NDArray[np.bool_] = np.empty(size, dtype=bool)
+        self.pulse_mask: NDArray[np.bool_] = np.empty(size, dtype=bool)
+        self.magnet_in_range_mask: NDArray[np.bool_] = np.empty(size, dtype=bool)
+        self.magnet_not_in_range: NDArray[np.bool_] = np.empty(size, dtype=bool)
+        self.magnet_distance_array: NDArray[np.float64] = np.empty(
+            size,
+            dtype=np.float64,
+        )
+        self.magnet_delta_array: NDArray[np.float64] = np.empty(
+            (size, 3),
+            dtype=np.float64,
+        )
+        self.new_x: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.new_y: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.new_z: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.pulse_scale: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.pull_strength: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.pull_distance: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.pull_positive_mask: NDArray[np.bool_] = np.empty(size, dtype=bool)
+        self.pull_mask: NDArray[np.bool_] = np.empty(size, dtype=bool)
+
+
+class ObstacleBatchScratch:
+    """Reusable scratch buffers for obstacle batch animation math."""
+
+    def __init__(self, size: int) -> None:
+        """Allocate reusable arrays for the given obstacle batch size."""
+        self.size = size
+        self.spin_x: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.spin_y: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.spin_z: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.drift_speed_x: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.drift_speed_z: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.is_sphere: NDArray[np.bool_] = np.empty(size, dtype=bool)
+        self.drift_progress: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.drift_blend: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.base_x: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.base_z: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.drift_mask: NDArray[np.bool_] = np.empty(size, dtype=bool)
+        self.apply_mask: NDArray[np.bool_] = np.empty(size, dtype=bool)
+        self.not_sphere: NDArray[np.bool_] = np.empty(size, dtype=bool)
+        self.new_x: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+        self.new_z: NDArray[np.float64] = np.empty(size, dtype=np.float64)
+
+
+_coin_scratch: CoinBatchScratch | None = None
+_obstacle_scratch: ObstacleBatchScratch | None = None
+
+
+def _get_coin_scratch(size: int) -> CoinBatchScratch:
+    global _coin_scratch
+    if _coin_scratch is None or _coin_scratch.size != size:
+        _coin_scratch = CoinBatchScratch(size)
+    return _coin_scratch
+
+
+def _get_obstacle_scratch(size: int) -> ObstacleBatchScratch:
+    global _obstacle_scratch
+    if _obstacle_scratch is None or _obstacle_scratch.size != size:
+        _obstacle_scratch = ObstacleBatchScratch(size)
+    return _obstacle_scratch
 
 
 # C901/PLR0912/PLR0913/PLR0915: vectorized batch keeps logic consolidated.
@@ -46,91 +139,81 @@ def _update_coin_batch(  # noqa: C901, PLR0912, PLR0913, PLR0915
 
     batch_start = monotonic() if perf_tracker and perf_tracker.enabled else 0.0
 
-    positions: NDArray[np.float64] = np.array(
-        [(coin.entity.x, coin.entity.y, coin.entity.z) for coin in coins],
-        dtype=np.float64,
-    )
-    base_x: NDArray[np.float64] = np.array(
-        [coin.base_x for coin in coins],
-        dtype=np.float64,
-    )
-    base_y: NDArray[np.float64] = np.array(
-        [coin.base_y for coin in coins],
-        dtype=np.float64,
-    )
-    base_z: NDArray[np.float64] = np.array(
-        [coin.base_z for coin in coins],
-        dtype=np.float64,
-    )
-    motion_frequency: NDArray[np.float64] = np.array(
-        [coin.motion_frequency for coin in coins],
-        dtype=np.float64,
-    )
-    motion_phase: NDArray[np.float64] = np.array(
-        [coin.motion_phase for coin in coins],
-        dtype=np.float64,
-    )
-    motion_amplitude: NDArray[np.float64] = np.array(
-        [coin.motion_amplitude for coin in coins],
-        dtype=np.float64,
-    )
-    bob_frequency: NDArray[np.float64] = np.array(
-        [coin.bob_frequency for coin in coins],
-        dtype=np.float64,
-    )
-    bob_amplitude: NDArray[np.float64] = np.array(
-        [coin.bob_amplitude for coin in coins],
-        dtype=np.float64,
-    )
-    pulse_frequency: NDArray[np.float64] = np.array(
-        [coin.pulse_frequency for coin in coins],
-        dtype=np.float64,
-    )
-    pulse_amplitude: NDArray[np.float64] = np.array(
-        [coin.pulse_amplitude for coin in coins],
-        dtype=np.float64,
-    )
+    coin_count = len(coins)
+    scratch = _get_coin_scratch(coin_count)
+    positions = scratch.positions
+    base_x = scratch.base_x
+    base_y = scratch.base_y
+    base_z = scratch.base_z
+    motion_frequency = scratch.motion_frequency
+    motion_phase = scratch.motion_phase
+    motion_amplitude = scratch.motion_amplitude
+    bob_frequency = scratch.bob_frequency
+    bob_amplitude = scratch.bob_amplitude
+    pulse_frequency = scratch.pulse_frequency
+    pulse_amplitude = scratch.pulse_amplitude
+    motion_kind_index = scratch.motion_kind_index
+    for index, coin in enumerate(coins):
+        positions[index, 0] = coin.entity.x
+        positions[index, 1] = coin.entity.y
+        positions[index, 2] = coin.entity.z
+        base_x[index] = coin.base_x
+        base_y[index] = coin.base_y
+        base_z[index] = coin.base_z
+        motion_frequency[index] = coin.motion_frequency
+        motion_phase[index] = coin.motion_phase
+        motion_amplitude[index] = coin.motion_amplitude
+        bob_frequency[index] = coin.bob_frequency
+        bob_amplitude[index] = coin.bob_amplitude
+        pulse_frequency[index] = coin.pulse_frequency
+        pulse_amplitude[index] = coin.pulse_amplitude
+        motion_kind_index[index] = coin.motion_kind_index
 
-    motion_kind = [coin.motion_kind for coin in coins]
-    has_motion: NDArray[np.bool_] = np.array(
-        [bool(kind) for kind in motion_kind],
-        dtype=bool,
-    )
-    is_wave: NDArray[np.bool_] = np.array(
-        [kind == "lane_wave" for kind in motion_kind],
-        dtype=bool,
-    )
-    is_orbit: NDArray[np.bool_] = np.array(
-        [kind == "lane_orbit" for kind in motion_kind],
-        dtype=bool,
-    )
-    is_slalom: NDArray[np.bool_] = np.array(
-        [kind == "lane_slalom" for kind in motion_kind],
-        dtype=bool,
-    )
+    has_motion = scratch.has_motion
+    is_wave = scratch.is_wave
+    is_orbit = scratch.is_orbit
+    is_slalom = scratch.is_slalom
+    np.not_equal(motion_kind_index, MOTION_KIND_NONE, out=has_motion)
+    np.equal(motion_kind_index, MOTION_KIND_WAVE, out=is_wave)
+    np.equal(motion_kind_index, MOTION_KIND_ORBIT, out=is_orbit)
+    np.equal(motion_kind_index, MOTION_KIND_SLALOM, out=is_slalom)
 
-    magnet_in_range_mask: NDArray[np.bool_] = np.zeros(len(coins), dtype=bool)
-    magnet_distance_array: NDArray[np.float64] = np.zeros(
-        len(coins),
-        dtype=np.float64,
-    )
-    magnet_delta_array: NDArray[np.float64] = np.zeros_like(positions)
+    magnet_in_range_mask = scratch.magnet_in_range_mask
+    magnet_distance_array = scratch.magnet_distance_array
+    magnet_delta_array = scratch.magnet_delta_array
+    magnet_in_range_mask.fill(False)
     if magnet_active:
         player_vec = np.array(
             [player_position.x, player_position.y, player_position.z],
             dtype=np.float64,
         )
-        magnet_delta_array = player_vec - positions
-        magnet_distance_array = np.linalg.norm(magnet_delta_array, axis=1)
-        magnet_distance_array = np.maximum(magnet_distance_array, 0.01)
-        magnet_in_range_mask = magnet_distance_array <= gameplay_settings.magnet_radius
+        np.subtract(player_vec, positions, out=magnet_delta_array)
+        magnet_distance_array[:] = np.linalg.norm(magnet_delta_array, axis=1)
+        np.maximum(magnet_distance_array, 0.01, out=magnet_distance_array)
+        np.less_equal(
+            magnet_distance_array,
+            gameplay_settings.magnet_radius,
+            out=magnet_in_range_mask,
+        )
+    else:
+        magnet_distance_array.fill(0.0)
 
-    new_x: NDArray[np.float64] = positions[:, 0].copy()
-    new_y: NDArray[np.float64] = positions[:, 1].copy()
-    new_z: NDArray[np.float64] = positions[:, 2].copy()
+    new_x = scratch.new_x
+    new_y = scratch.new_y
+    new_z = scratch.new_z
+    np.copyto(new_x, positions[:, 0])
+    np.copyto(new_y, positions[:, 1])
+    np.copyto(new_z, positions[:, 2])
 
-    motion_mask = has_motion & ~magnet_in_range_mask
-    wave_mask = motion_mask & is_wave
+    motion_mask = scratch.motion_mask
+    wave_mask = scratch.wave_mask
+    orbit_mask = scratch.orbit_mask
+    slalom_mask = scratch.slalom_mask
+    bob_mask = scratch.bob_mask
+    pulse_mask = scratch.pulse_mask
+    np.logical_not(magnet_in_range_mask, out=scratch.magnet_not_in_range)
+    np.logical_and(has_motion, scratch.magnet_not_in_range, out=motion_mask)
+    np.logical_and(motion_mask, is_wave, out=wave_mask)
     if np.any(wave_mask):
         wave_phase_array = (runtime_time * motion_frequency[wave_mask]) + (
             motion_phase[wave_mask]
@@ -138,7 +221,7 @@ def _update_coin_batch(  # noqa: C901, PLR0912, PLR0913, PLR0915
         sway_array = np.sin(wave_phase_array) * motion_amplitude[wave_mask]
         new_x[wave_mask] = base_x[wave_mask] + sway_array
 
-    orbit_mask = motion_mask & is_orbit
+    np.logical_and(motion_mask, is_orbit, out=orbit_mask)
     if np.any(orbit_mask):
         orbit_phase_array = (runtime_time * motion_frequency[orbit_mask]) + (
             motion_phase[orbit_mask]
@@ -150,7 +233,7 @@ def _update_coin_batch(  # noqa: C901, PLR0912, PLR0913, PLR0915
             np.sin(orbit_phase_array) * motion_amplitude[orbit_mask]
         )
 
-    slalom_mask = motion_mask & is_slalom
+    np.logical_and(motion_mask, is_slalom, out=slalom_mask)
     if np.any(slalom_mask):
         slalom_phase_array = (runtime_time * motion_frequency[slalom_mask]) + (
             motion_phase[slalom_mask]
@@ -160,7 +243,7 @@ def _update_coin_batch(  # noqa: C901, PLR0912, PLR0913, PLR0915
         new_x[slalom_mask] = base_x[slalom_mask] + sway_array
         new_y[slalom_mask] = base_y[slalom_mask] + lift_array
 
-    bob_mask = bob_amplitude > 0.0
+    np.greater(bob_amplitude, 0.0, out=bob_mask)
     if np.any(bob_mask):
         bob_phase_array: NDArray[np.float64] = (
             runtime_time * bob_frequency[bob_mask]
@@ -170,8 +253,9 @@ def _update_coin_batch(  # noqa: C901, PLR0912, PLR0913, PLR0915
         )
         new_y[bob_mask] = base_y[bob_mask] + bob_offset_array
 
-    pulse_scale: NDArray[np.float64] = np.ones(len(coins), dtype=np.float64)
-    pulse_mask = pulse_amplitude > 0.0
+    pulse_scale = scratch.pulse_scale
+    pulse_scale.fill(1.0)
+    np.greater(pulse_amplitude, 0.0, out=pulse_mask)
     if np.any(pulse_mask):
         pulse_phase_array: NDArray[np.float64] = (
             runtime_time * pulse_frequency[pulse_mask]
@@ -183,15 +267,16 @@ def _update_coin_batch(  # noqa: C901, PLR0912, PLR0913, PLR0915
     if magnet_active and np.any(magnet_in_range_mask):
         magnet_radius = gameplay_settings.magnet_radius
         magnet_strength = gameplay_settings.magnet_strength
-        pull_strength_array: NDArray[np.float64] = 1.0 - (
-            magnet_distance_array / magnet_radius
-        )
-        pull_distance_array = magnet_strength * pull_strength_array * dt
-        pull_distance_array = np.minimum(
-            pull_distance_array,
-            magnet_distance_array,
-        )
-        pull_mask = magnet_in_range_mask & (pull_distance_array > 0.0)
+        pull_strength_array = scratch.pull_strength
+        pull_distance_array = scratch.pull_distance
+        pull_positive_mask = scratch.pull_positive_mask
+        pull_mask = scratch.pull_mask
+        np.divide(magnet_distance_array, magnet_radius, out=pull_strength_array)
+        np.subtract(1.0, pull_strength_array, out=pull_strength_array)
+        pull_distance_array[:] = magnet_strength * pull_strength_array * dt
+        np.minimum(pull_distance_array, magnet_distance_array, out=pull_distance_array)
+        np.greater(pull_distance_array, 0.0, out=pull_positive_mask)
+        np.logical_and(magnet_in_range_mask, pull_positive_mask, out=pull_mask)
         if np.any(pull_mask):
             normalized_delta_array: NDArray[np.float64] = (
                 magnet_delta_array[pull_mask]
@@ -266,39 +351,47 @@ def _update_obstacle_batch(
 
     batch_start = monotonic() if perf_tracker and perf_tracker.enabled else 0.0
 
-    spin_x = np.array([obj.spin_speed_x for obj in obstacles], dtype=np.float64)
-    spin_y = np.array([obj.spin_speed_y for obj in obstacles], dtype=np.float64)
-    spin_z = np.array([obj.spin_speed_z for obj in obstacles], dtype=np.float64)
-    drift_speed_x = np.array([obj.drift_speed_x for obj in obstacles], dtype=np.float64)
-    drift_speed_z = np.array([obj.drift_speed_z for obj in obstacles], dtype=np.float64)
-    is_sphere = np.array(
-        [obj.model_name in {"sphere", "icosphere"} for obj in obstacles],
-        dtype=bool,
-    )
-    drift_progress = np.array(
-        [obj.drift_progress for obj in obstacles],
-        dtype=np.float64,
-    )
-    drift_blend = np.array(
-        [obj.drift_blend for obj in obstacles],
-        dtype=np.float64,
-    )
-    base_x = np.array([obj.base_x for obj in obstacles], dtype=np.float64)
-    base_z = np.array([obj.base_z for obj in obstacles], dtype=np.float64)
+    obstacle_count = len(obstacles)
+    scratch = _get_obstacle_scratch(obstacle_count)
+    spin_x = scratch.spin_x
+    spin_y = scratch.spin_y
+    spin_z = scratch.spin_z
+    drift_speed_x = scratch.drift_speed_x
+    drift_speed_z = scratch.drift_speed_z
+    is_sphere = scratch.is_sphere
+    not_sphere = scratch.not_sphere
+    drift_progress = scratch.drift_progress
+    drift_blend = scratch.drift_blend
+    base_x = scratch.base_x
+    base_z = scratch.base_z
+    for index, obj in enumerate(obstacles):
+        spin_x[index] = obj.spin_speed_x
+        spin_y[index] = obj.spin_speed_y
+        spin_z[index] = obj.spin_speed_z
+        drift_speed_x[index] = obj.drift_speed_x
+        drift_speed_z[index] = obj.drift_speed_z
+        is_sphere[index] = obj.model_name in {"sphere", "icosphere"}
+        drift_progress[index] = obj.drift_progress
+        drift_blend[index] = obj.drift_blend
+        base_x[index] = obj.base_x
+        base_z[index] = obj.base_z
 
     spin_x *= dt
     spin_y *= dt
     spin_z *= dt
 
-    drift_mask = (drift_speed_x != 0.0) | (drift_speed_z != 0.0)
-    apply_mask = drift_mask & ~is_sphere
-    new_x = base_x.copy()
-    new_z = base_z.copy()
+    drift_mask = scratch.drift_mask
+    apply_mask = scratch.apply_mask
+    new_x = scratch.new_x
+    new_z = scratch.new_z
+    np.logical_or(drift_speed_x != 0.0, drift_speed_z != 0.0, out=drift_mask)
+    np.logical_not(is_sphere, out=not_sphere)
+    np.logical_and(drift_mask, not_sphere, out=apply_mask)
+    np.copyto(new_x, base_x)
+    np.copyto(new_z, base_z)
     if np.any(apply_mask):
-        drift_blend[apply_mask] = np.minimum(
-            1.0,
-            drift_blend[apply_mask] + (dt * 1.6),
-        )
+        np.add(drift_blend[apply_mask], (dt * 1.6), out=drift_blend[apply_mask])
+        np.minimum(drift_blend[apply_mask], 1.0, out=drift_blend[apply_mask])
         blended_dt = drift_blend[apply_mask] * dt
         drift_progress[apply_mask] = drift_progress[apply_mask] + blended_dt
         new_x[apply_mask] = base_x[apply_mask] + (
