@@ -20,9 +20,11 @@ from planetfall.game.runtime_spawn_coins import (
 )
 from planetfall.game.runtime_spawn_obstacles import (
     ASTEROID_MODEL_NAME,
+    ASTEROID_MODEL_VARIANTS,
     ASTEROID_SCALE_MAX,
     ASTEROID_SCALE_MIN,
     choose_asteroid_variant,
+    create_asteroid_instance,
 )
 from planetfall.game.runtime_spawn_powerups import update_powerup_spawning
 from planetfall.game.runtime_state import SpawnedObject
@@ -71,18 +73,32 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
         f"{blueprint.name}_"
         f"{blueprint_index}"
     )
-    entity = Entity(
-        name=entity_name,
-        model=spawn_model,
-        color=resolve_color(blueprint.color_name),
-        scale=Vec3(blueprint.scale.x, blueprint.scale.y, blueprint.scale.z),
-        position=Vec3(
+    if blueprint.entity_kind == "obstacle" and spawn_model in ASTEROID_MODEL_VARIANTS:
+        entity = create_asteroid_instance(
+            name=entity_name,
+            model_name=spawn_model,
+            texture_path=spawn_texture,
+        )
+        entity.color = resolve_color(blueprint.color_name)
+        entity.scale = Vec3(blueprint.scale.x, blueprint.scale.y, blueprint.scale.z)
+        entity.position = Vec3(
             blueprint.position.x,
             blueprint.position.y,
             blueprint.position.z,
-        ),
-    )
-    if spawn_texture is not None:
+        )
+    else:
+        entity = Entity(
+            name=entity_name,
+            model=spawn_model,
+            color=resolve_color(blueprint.color_name),
+            scale=Vec3(blueprint.scale.x, blueprint.scale.y, blueprint.scale.z),
+            position=Vec3(
+                blueprint.position.x,
+                blueprint.position.y,
+                blueprint.position.z,
+            ),
+        )
+    if spawn_texture is not None and blueprint.entity_kind != "obstacle":
         entity.texture = spawn_texture
 
     base_scale = Vec3(entity.scale.x, entity.scale.y, entity.scale.z)
