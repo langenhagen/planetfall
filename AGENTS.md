@@ -55,7 +55,8 @@ Prefer repo-local, reproducible commands:
 - Run type checks: `uv run mypy planetfall`.
 - Run TOML checks/formatting: `taplo check .` and `taplo fmt .`.
 - Install hooks: `uv run pre-commit install`.
-- Run hooks manually: `uv run pre-commit run --all-files`.
+- Fast iteration: `uv run pre-commit run`, use liberally.
+- Run hooks manually on all files: `uv run pre-commit run --all-files`.
 - For shell scripts:
   - `shellcheck -x --exclude SC2059 <path/to/script.sh>`
   - `shfmt --indent 4 --write <path/to/script.sh>`

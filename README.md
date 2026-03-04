@@ -87,7 +87,8 @@ uv run pytest
 # install git hooks
 uv run pre-commit install
 
-# run all hooks once manually
+# run hooks
+uv run pre-commit run
 uv run pre-commit run --all-files
 ```
 
