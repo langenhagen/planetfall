@@ -90,14 +90,12 @@ class ObstacleBatchScratch:
         self.spin_z: NDArray[np.float64] = np.empty(size, dtype=np.float64)
         self.drift_speed_x: NDArray[np.float64] = np.empty(size, dtype=np.float64)
         self.drift_speed_z: NDArray[np.float64] = np.empty(size, dtype=np.float64)
-        self.is_sphere: NDArray[np.bool_] = np.empty(size, dtype=bool)
         self.drift_progress: NDArray[np.float64] = np.empty(size, dtype=np.float64)
         self.drift_blend: NDArray[np.float64] = np.empty(size, dtype=np.float64)
         self.base_x: NDArray[np.float64] = np.empty(size, dtype=np.float64)
         self.base_z: NDArray[np.float64] = np.empty(size, dtype=np.float64)
         self.drift_mask: NDArray[np.bool_] = np.empty(size, dtype=bool)
         self.apply_mask: NDArray[np.bool_] = np.empty(size, dtype=bool)
-        self.not_sphere: NDArray[np.bool_] = np.empty(size, dtype=bool)
         self.new_x: NDArray[np.float64] = np.empty(size, dtype=np.float64)
         self.new_z: NDArray[np.float64] = np.empty(size, dtype=np.float64)
 
@@ -358,8 +356,6 @@ def _update_obstacle_batch(
     spin_z = scratch.spin_z
     drift_speed_x = scratch.drift_speed_x
     drift_speed_z = scratch.drift_speed_z
-    is_sphere = scratch.is_sphere
-    not_sphere = scratch.not_sphere
     drift_progress = scratch.drift_progress
     drift_blend = scratch.drift_blend
     base_x = scratch.base_x
@@ -370,7 +366,6 @@ def _update_obstacle_batch(
         spin_z[index] = obj.spin_speed_z
         drift_speed_x[index] = obj.drift_speed_x
         drift_speed_z[index] = obj.drift_speed_z
-        is_sphere[index] = obj.model_name in {"sphere", "icosphere"}
         drift_progress[index] = obj.drift_progress
         drift_blend[index] = obj.drift_blend
         base_x[index] = obj.base_x
@@ -385,8 +380,7 @@ def _update_obstacle_batch(
     new_x = scratch.new_x
     new_z = scratch.new_z
     np.logical_or(drift_speed_x != 0.0, drift_speed_z != 0.0, out=drift_mask)
-    np.logical_not(is_sphere, out=not_sphere)
-    np.logical_and(drift_mask, not_sphere, out=apply_mask)
+    np.copyto(apply_mask, drift_mask)
     np.copyto(new_x, base_x)
     np.copyto(new_z, base_z)
     if np.any(apply_mask):
@@ -402,8 +396,6 @@ def _update_obstacle_batch(
         )
 
     for index, spawned in enumerate(obstacles):
-        if is_sphere[index]:
-            continue
         spawned.entity.rotation_x += float(spin_x[index])
         spawned.entity.rotation_y += float(spin_y[index])
         spawned.entity.rotation_z += float(spin_z[index])
