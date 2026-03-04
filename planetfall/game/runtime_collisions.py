@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from planetfall.game.config import FallSettings, GameplayTuningSettings
+    from planetfall.game.runtime_perf import PerfTracker
     from planetfall.game.runtime_state import (
         FallingRunState,
         MotionState,
@@ -55,8 +56,10 @@ def _compute_collision_hits(
     player_position: Vec3,
     player_radius: float,
     spawned_objects: list[SpawnedObject],
+    perf_tracker: PerfTracker | None = None,
 ) -> NDArray[np.bool_]:
     """Return a boolean mask for which objects intersect the player."""
+    start = monotonic() if perf_tracker and perf_tracker.enabled else 0.0
     positions = np.array(
         [
             (
@@ -77,7 +80,10 @@ def _compute_collision_hits(
     hit_radius = player_radius + positions[:, 3]
     distance_squared: NDArray[np.floating] = np.einsum("ij,ij->i", deltas, deltas)
     hit_distance: NDArray[np.floating] = hit_radius * hit_radius
-    return np.asarray(distance_squared <= hit_distance, dtype=np.bool_)
+    hits = np.asarray(distance_squared <= hit_distance, dtype=np.bool_)
+    if perf_tracker and perf_tracker.enabled:
+        perf_tracker.record("collision_hits", monotonic() - start)
+    return hits
 
 
 def _handle_coin_collision(
@@ -217,6 +223,7 @@ def process_collisions(  # noqa: PLR0913
     fall_settings: FallSettings,
     gameplay_settings: GameplayTuningSettings,
     hit_flash: Entity | None = None,
+    perf_tracker: PerfTracker | None = None,
 ) -> None:
     """Handle collisions with coins and obstacles for score and reset behavior."""
     now = monotonic()
@@ -239,6 +246,7 @@ def process_collisions(  # noqa: PLR0913
         player_position=player.position,
         player_radius=PLAYER_COLLISION_RADIUS,
         spawned_objects=spawned_objects,
+        perf_tracker=perf_tracker,
     )
 
     for index, spawned in enumerate(spawned_objects):

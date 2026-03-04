@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from planetfall.game.config import GameplayTuningSettings
+    from planetfall.game.runtime_perf import PerfTracker
     from planetfall.game.runtime_state import FallingRunState, SpawnedObject
 
 ANIMATION_CULL_DISTANCE = 170.0
@@ -38,9 +39,12 @@ def _update_coin_batch(  # noqa: C901, PLR0912, PLR0913, PLR0915
     gameplay_settings: GameplayTuningSettings,
     magnet_active: bool,
     wave_cache: dict[tuple[int, float], tuple[float, float, float]],
+    perf_tracker: PerfTracker | None = None,
 ) -> None:
     if not coins:
         return
+
+    batch_start = monotonic() if perf_tracker and perf_tracker.enabled else 0.0
 
     positions: NDArray[np.float64] = np.array(
         [(coin.entity.x, coin.entity.y, coin.entity.z) for coin in coins],
@@ -245,17 +249,22 @@ def _update_coin_batch(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 max(MIN_ENTITY_SCALE, spawned.base_scale.y * 1.12),
                 max(MIN_ENTITY_SCALE, spawned.base_scale.z * 1.12),
             )
+    if perf_tracker and perf_tracker.enabled:
+        perf_tracker.record("coin_batch", monotonic() - batch_start)
 
 
 def _update_obstacle_batch(
     obstacles: list[SpawnedObject],
     *,
     dt: float,
+    perf_tracker: PerfTracker | None = None,
 ) -> None:
     # R0914: batch math uses many intermediate arrays.
     # pylint: disable=too-many-locals
     if not obstacles:
         return
+
+    batch_start = monotonic() if perf_tracker and perf_tracker.enabled else 0.0
 
     spin_x = np.array([obj.spin_speed_x for obj in obstacles], dtype=np.float64)
     spin_y = np.array([obj.spin_speed_y for obj in obstacles], dtype=np.float64)
@@ -310,6 +319,8 @@ def _update_obstacle_batch(
             spawned.drift_progress = float(drift_progress[index])
             spawned.entity.x = float(new_x[index])
             spawned.entity.z = float(new_z[index])
+    if perf_tracker and perf_tracker.enabled:
+        perf_tracker.record("obstacle_batch", monotonic() - batch_start)
 
 
 def animate_spawned_objects(  # noqa: C901, PLR0912, PLR0915
@@ -319,6 +330,7 @@ def animate_spawned_objects(  # noqa: C901, PLR0912, PLR0915
     dt: float,
     player_y: float,
     player_position: Vec3,
+    perf_tracker: PerfTracker | None = None,
 ) -> None:
     # R0912/R0914/R0915: frame loop.
     """Animate collectibles and obstacles for richer motion language."""
@@ -430,6 +442,9 @@ def animate_spawned_objects(  # noqa: C901, PLR0912, PLR0915
         survivors.append(spawned)
 
     run_state.spawned_objects = survivors
+    if perf_tracker and perf_tracker.enabled:
+        perf_tracker.set_gauge("coins", len(coin_batch))
+        perf_tracker.set_gauge("obstacles", len(obstacle_batch))
     _update_coin_batch(
         coin_batch,
         runtime_time=runtime_time,
@@ -438,6 +453,7 @@ def animate_spawned_objects(  # noqa: C901, PLR0912, PLR0915
         gameplay_settings=gameplay_settings,
         magnet_active=magnet_active,
         wave_cache=wave_cache,
+        perf_tracker=perf_tracker,
     )
     if multiplier_active:
         for spawned in coin_batch:
@@ -448,4 +464,8 @@ def animate_spawned_objects(  # noqa: C901, PLR0912, PLR0915
             )
     if not multiplier_active and run_state.coin_multiplier_factor != 1.0:
         run_state.coin_multiplier_factor = 1.0
-    _update_obstacle_batch(obstacle_batch, dt=dt)
+    _update_obstacle_batch(
+        obstacle_batch,
+        dt=dt,
+        perf_tracker=perf_tracker,
+    )

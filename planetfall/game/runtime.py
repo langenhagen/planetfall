@@ -75,6 +75,7 @@ from planetfall.game.runtime_entities import (
     spawn_player_avatar,
 )
 from planetfall.game.runtime_fx import create_hit_flash
+from planetfall.game.runtime_perf import PerfTracker
 from planetfall.game.runtime_postfx import next_post_process_option, toggle_render_mode
 from planetfall.game.runtime_random import deterministic_probability_hit
 from planetfall.game.runtime_spawn import (
@@ -540,6 +541,7 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
     )
     motion_state = MotionState()
     run_state = FallingRunState()
+    perf_tracker = PerfTracker(enabled=settings.perf_log_enabled)
     initialize_run_state(run_state, settings.fall)
     post_process_index = 0
     apply_camera_post_process(CAMERA_POST_PROCESS_OPTIONS[post_process_index][1])
@@ -775,13 +777,20 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
         )
         if music_state["track"] is None and music_playlist:
             music_state["track"] = start_music_track(music_playlist.pop(0))
+        animation_start = monotonic()
         animate_spawned_objects(
             run_state,
             settings.gameplay,
             dt,
             player.y,
             player.position,
+            perf_tracker=perf_tracker,
         )
+        perf_tracker.record("animate", monotonic() - animation_start)
+        perf_tracker.set_gauge("spawned", float(len(run_state.spawned_objects)))
+        if dt > 0.0:
+            perf_tracker.set_gauge("fps", 1.0 / dt)
+        collision_start = monotonic()
         process_collisions(
             player=player,
             motion_state=motion_state,
@@ -789,12 +798,15 @@ def install_game_controller(  # noqa: C901, PLR0913, PLR0915
             fall_settings=settings.fall,
             gameplay_settings=settings.gameplay,
             hit_flash=hit_flash,
+            perf_tracker=perf_tracker,
         )
+        perf_tracker.record("collisions", monotonic() - collision_start)
         cleanup_passed_objects(
             run_state=run_state,
             player_y=player.y,
             cleanup_above_distance=settings.fall.cleanup_above_distance,
         )
+        perf_tracker.maybe_report()
 
         update_camera_tracking(
             player=player,

@@ -92,6 +92,7 @@ class GameSettings:  # pylint: disable=too-many-instance-attributes
     borderless: bool = False
     fullscreen: bool = False
     development_mode: bool = True
+    perf_log_enabled: bool = True
     window_size: tuple[int, int] | None = None
     movement: MovementSettings = field(default_factory=MovementSettings)
     fall: FallSettings = field(default_factory=FallSettings)
