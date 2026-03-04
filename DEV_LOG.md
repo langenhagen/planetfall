@@ -18,3 +18,8 @@ decisions. Append newest entries at the end.
 
 - Asteroid scene-graph instancing (Panda3D `instanceTo`) reduced observed FPS
   dips in Ursina's on-screen counter. Keeping enabled.
+
+## 2026-03-04 15:34 +0100
+
+- Tried coin instancing. No clear perf win in runs and coins rendered white
+  (per-entity color not preserved). Reverted.
