@@ -13,3 +13,8 @@ decisions. Append newest entries at the end.
 - Tried precomputed coin motion flags (store per-coin booleans at spawn for
   wave/orbit/slalom/bob/pulse so per-frame updates do not recompute masks).
   No clear perf improvement. User reverted.
+
+## 2026-03-04 13:28 +0100
+
+- Asteroid scene-graph instancing (Panda3D `instanceTo`) reduced observed FPS
+  dips in Ursina's on-screen counter. Keeping enabled.
