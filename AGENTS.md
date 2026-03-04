@@ -83,6 +83,8 @@ Interpret these tokens as explicit workflow commands:
   on rationale, tradeoffs, and how pieces fit together.
 - `eli5`: Provide an Explain Like I am 5 explanation; keep it short, concrete,
   and technically correct.
+- `dl`, `devlog`, or `dev log`: Append a short entry to `DEV_LOG.md` with the
+  current timestamp and a brief note about the change, experiment, or decision.
 - `sw`: Explicitly search the web before answering and use results as context.
 - `mc`, `cm`, or `commit`:
   - Identify how many commits to make then make them.
