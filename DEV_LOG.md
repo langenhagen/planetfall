@@ -23,3 +23,8 @@ decisions. Append newest entries at the end.
 
 - Tried coin instancing. No clear perf win in runs and coins rendered white
   (per-entity color not preserved). Reverted.
+
+## 2026-03-14 12:08 +0100
+
+- Discussed porting to C++/another engine: possible CPU gains, but not a
+  guaranteed big FPS win without architectural changes; high rewrite cost.
