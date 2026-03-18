@@ -24,8 +24,9 @@ Conversion scripts:
 
 ## Models
 
-Models live under [assets/models/](models/) and are authored as `.obj` with `.mtl` +
-textures. The game uses pre-converted `.bam` files next to each `.obj`.
+Models live under [assets/models/](models/) and are authored as `.obj` with
+textures. Some models do not include `.mtl` files, so materials are applied
+programmatically. The game uses pre-converted `.bam` files next to each `.obj`.
 
 Conversion script:
 
