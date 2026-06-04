@@ -172,7 +172,6 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
         pulse_amplitude = 0.08 + ((variation_seed % 3) * 0.03)
         pulse_frequency = 4.2 + ((variation_seed % 4) * 0.48)
     else:
-        mark_lit_shadowed(entity)
         should_spin = False
         if blueprint.entity_kind == "obstacle":
             should_spin = deterministic_probability_hit(
@@ -181,7 +180,7 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
             )
             if blueprint.model == ASTEROID_MODEL_NAME:
                 target_color = resolve_color("white")
-                entity.unlit = False
+                entity.unlit = True
                 scale_multiplier = discrete_value_in_range(
                     seed=variation_seed + 53,
                     variant_count=11,
@@ -222,7 +221,10 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
                             minimum_magnitude=0.2,
                             maximum_magnitude=0.9,
                         )
+            else:
+                mark_lit_shadowed(entity)
         else:
+            mark_lit_shadowed(entity)
             spin_speed_x = 0.0
             spin_speed_y = 6.0 + ((variation_seed % 5) * 2.5)
             spin_speed_z = 0.0
