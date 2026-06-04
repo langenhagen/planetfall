@@ -15,6 +15,7 @@ from planetfall.game.runtime_random import (
 )
 from planetfall.game.runtime_spawn_coins import (
     MOTION_KIND_INDEX_BY_NAME,
+    create_coin_instance,
     rainbow_lane_rgb,
     rainbow_wave_rgb,
 )
@@ -87,6 +88,15 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
             blueprint.position.z,
         )
         entity.rotation_z = (variation_seed * 29) % 360
+    elif blueprint.entity_kind == "coin":
+        entity = create_coin_instance(name=entity_name)
+        entity.color = resolve_color(blueprint.color_name)
+        entity.scale = Vec3(blueprint.scale.x, blueprint.scale.y, blueprint.scale.z)
+        entity.position = Vec3(
+            blueprint.position.x,
+            blueprint.position.y,
+            blueprint.position.z,
+        )
     else:
         entity = Entity(
             name=entity_name,
@@ -151,7 +161,7 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
                 Entity(
                     parent=entity,
                     name=f"{entity_name}_coin_halo",
-                    model=spawn_model,
+                    model="quad",
                     scale=Vec3(1.18, 1.18, 1.18),
                     color=rgba_color(
                         min(1.0, rainbow_red * 1.1),
@@ -164,9 +174,7 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
         spin_speed_x = 0.0
         spin_speed_y = (88.0 + ((blueprint_index % 4) * 16.0)) * 0.3
         spin_speed_z = 0.0
-        entity.rotation_x = -6.0 + ((blueprint_index % 5) * 3.0)
         entity.rotation_y = ((band_index * 26.0) + (blueprint_index * 32.0)) % 360.0
-        entity.rotation_z = -4.0 + ((blueprint_index % 4) * 2.5)
         bob_amplitude = 0.08 + ((variation_seed % 4) * 0.03)
         bob_frequency = 2.5 + ((variation_seed % 5) * 0.36)
         pulse_amplitude = 0.08 + ((variation_seed % 3) * 0.03)
