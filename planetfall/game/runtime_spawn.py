@@ -133,7 +133,6 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
 
     if blueprint.entity_kind == "coin":
         entity.unlit = True
-        entity.texture = None
         if blueprint.color_name == "rainbow":
             rainbow_red, rainbow_green, rainbow_blue = rainbow_lane_rgb(
                 blueprint.position.x,
