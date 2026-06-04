@@ -111,7 +111,7 @@ def create_asteroid_instance(
     texture_path: str | None,
 ) -> Entity:
     """Create an instanced asteroid entity from a cached textured quad."""
-    entity = Entity(name=name)
+    entity = Entity(name=name, rotation_x=90)
     if texture_path is not None:
         model = _load_asteroid_model(texture_path)
         model.instanceTo(entity)
