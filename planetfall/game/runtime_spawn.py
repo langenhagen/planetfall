@@ -91,7 +91,11 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
     elif blueprint.entity_kind == "coin":
         entity = create_coin_instance(name=entity_name)
         entity.color = resolve_color(blueprint.color_name)
-        entity.scale = Vec3(blueprint.scale.x, blueprint.scale.y, blueprint.scale.z)
+        entity.scale = Vec3(
+            blueprint.scale.x * 2,
+            blueprint.scale.y * 2,
+            blueprint.scale.z * 2,
+        )
         entity.position = Vec3(
             blueprint.position.x,
             blueprint.position.y,
