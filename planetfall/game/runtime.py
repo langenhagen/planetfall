@@ -84,9 +84,8 @@ from planetfall.game.runtime_spawn import (
     update_powerup_spawning,
 )
 from planetfall.game.runtime_spawn_obstacles import (
-    ASTEROID_DIFFUSE_TEXTURE_BY_MODEL,
     ASTEROID_MODEL_NAME,
-    ASTEROID_MODEL_VARIANTS,
+    ASTEROID_TEXTURE_VARIANTS,
     choose_asteroid_variant,
 )
 from planetfall.game.runtime_spawn_powerups import (
@@ -112,9 +111,8 @@ from planetfall.game.runtime_ui import (
 from planetfall.game.scene import BAND_SPACING, COIN_PATTERN_COUNT
 
 __all__ = [
-    "ASTEROID_DIFFUSE_TEXTURE_BY_MODEL",
     "ASTEROID_MODEL_NAME",
-    "ASTEROID_MODEL_VARIANTS",
+    "ASTEROID_TEXTURE_VARIANTS",
     "POWERUP_MAGNET_KIND",
     "POWERUP_MODEL_NAME",
     "SpawnedObject",

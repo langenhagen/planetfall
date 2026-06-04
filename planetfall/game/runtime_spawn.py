@@ -20,9 +20,9 @@ from planetfall.game.runtime_spawn_coins import (
 )
 from planetfall.game.runtime_spawn_obstacles import (
     ASTEROID_MODEL_NAME,
-    ASTEROID_MODEL_VARIANTS,
     ASTEROID_SCALE_MAX,
     ASTEROID_SCALE_MIN,
+    ASTEROID_TEXTURE_VARIANTS,
     choose_asteroid_variant,
     create_asteroid_instance,
 )
@@ -73,7 +73,7 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
         f"{blueprint.name}_"
         f"{blueprint_index}"
     )
-    if blueprint.entity_kind == "obstacle" and spawn_model in ASTEROID_MODEL_VARIANTS:
+    if blueprint.entity_kind == "obstacle" and spawn_model in ASTEROID_TEXTURE_VARIANTS:
         entity = create_asteroid_instance(
             name=entity_name,
             model_name=spawn_model,
