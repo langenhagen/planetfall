@@ -181,9 +181,6 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
             if blueprint.model == ASTEROID_MODEL_NAME:
                 target_color = resolve_color("white")
                 entity.unlit = False
-                entity.rotation_x = (variation_seed * 37) % 360
-                entity.rotation_y = (variation_seed * 53) % 360
-                entity.rotation_z = (variation_seed * 29) % 360
                 scale_multiplier = discrete_value_in_range(
                     seed=variation_seed + 53,
                     variant_count=11,
@@ -214,25 +211,6 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
                             minimum_magnitude=0.2,
                             maximum_magnitude=0.9,
                         )
-            if should_spin:
-                spin_speed_x = signed_speed_from_seed(
-                    seed=variation_seed + 5,
-                    variant_count=gameplay_settings.obstacle_spin_variants + 6,
-                    minimum_magnitude=gameplay_settings.obstacle_spin_speed_min,
-                    maximum_magnitude=gameplay_settings.obstacle_spin_speed_max,
-                )
-                spin_speed_y = signed_speed_from_seed(
-                    seed=variation_seed + 11,
-                    variant_count=gameplay_settings.obstacle_spin_variants + 10,
-                    minimum_magnitude=gameplay_settings.obstacle_spin_speed_min,
-                    maximum_magnitude=gameplay_settings.obstacle_spin_speed_max,
-                )
-                spin_speed_z = signed_speed_from_seed(
-                    seed=variation_seed + 19,
-                    variant_count=gameplay_settings.obstacle_rock_variants + 10,
-                    minimum_magnitude=abs(gameplay_settings.obstacle_rock_speed_min),
-                    maximum_magnitude=abs(gameplay_settings.obstacle_rock_speed_max),
-                )
         else:
             spin_speed_x = 0.0
             spin_speed_y = 6.0 + ((variation_seed % 5) * 2.5)

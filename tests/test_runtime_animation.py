@@ -225,8 +225,8 @@ def test_batch_coin_animation_updates_positions() -> None:
     CHECKER.assertNotEqual(run_state.spawned_objects[0].entity.x, 0.0)
 
 
-def test_batch_obstacle_animation_updates_drift_and_spin() -> None:
-    """Batch path updates obstacle rotations and drift."""
+def test_batch_obstacle_animation_updates_drift() -> None:
+    """Batch path updates obstacle drift progress."""
     obstacles: list[SpawnedObject] = []
     for index in range(5):
         obstacle_entity = cast(
@@ -242,9 +242,6 @@ def test_batch_obstacle_animation_updates_drift_and_spin() -> None:
                 collision_radius=1.0,
                 score_value=0,
                 band_index=0,
-                spin_speed_x=10.0,
-                spin_speed_y=15.0,
-                spin_speed_z=20.0,
                 drift_speed_x=1.2,
                 drift_speed_z=-0.6,
                 base_x=float(index),
@@ -256,8 +253,6 @@ def test_batch_obstacle_animation_updates_drift_and_spin() -> None:
 
     _update_obstacle_batch(obstacles=run_state.spawned_objects, dt=0.2)
 
-    first = run_state.spawned_objects[0].entity
-    CHECKER.assertNotEqual(first.rotation_x, 0.0)
-    CHECKER.assertNotEqual(first.rotation_y, 0.0)
-    CHECKER.assertNotEqual(first.rotation_z, 0.0)
-    CHECKER.assertNotEqual(first.x, 0.0)
+    first = run_state.spawned_objects[0]
+    CHECKER.assertNotEqual(first.drift_blend, 0.0)
+    CHECKER.assertNotEqual(first.drift_progress, 0.0)

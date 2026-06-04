@@ -26,8 +26,8 @@ def test_spawn_entity_from_blueprint_allows_static_asteroid() -> None:
         collision_radius=0.5,
     )
     static_index = None
-    dynamic_index = None
-    for blueprint_index in range(32):
+    drift_index = None
+    for blueprint_index in range(256):
         variation_seed = blueprint_index * 17
         should_spin = deterministic_probability_hit(
             seed=variation_seed + 3,
@@ -35,13 +35,18 @@ def test_spawn_entity_from_blueprint_allows_static_asteroid() -> None:
         )
         if not should_spin and static_index is None:
             static_index = blueprint_index
-        if should_spin and dynamic_index is None:
-            dynamic_index = blueprint_index
-        if static_index is not None and dynamic_index is not None:
+        if should_spin:
+            should_drift = deterministic_probability_hit(
+                seed=variation_seed + 71,
+                probability=0.3,
+            )
+            if should_drift and drift_index is None:
+                drift_index = blueprint_index
+        if static_index is not None and drift_index is not None:
             break
 
     CHECKER.assertIsNotNone(static_index)
-    CHECKER.assertIsNotNone(dynamic_index)
+    CHECKER.assertIsNotNone(drift_index)
 
     static_spawned = spawn_entity_from_blueprint(
         blueprint=blueprint,
@@ -49,29 +54,22 @@ def test_spawn_entity_from_blueprint_allows_static_asteroid() -> None:
         blueprint_index=cast("int", static_index),
         gameplay_settings=GameplayTuningSettings(),
     )
-    dynamic_spawned = spawn_entity_from_blueprint(
+    drift_spawned = spawn_entity_from_blueprint(
         blueprint=blueprint,
         band_index=0,
-        blueprint_index=cast("int", dynamic_index),
+        blueprint_index=cast("int", drift_index),
         gameplay_settings=GameplayTuningSettings(),
     )
 
     static_is_static = (
-        static_spawned.spin_speed_x
-        == static_spawned.spin_speed_y
-        == static_spawned.spin_speed_z
-        == static_spawned.drift_speed_x
+        static_spawned.drift_speed_x
         == static_spawned.drift_speed_z
         == 0.0
     )
-    dynamic_is_static = (
-        dynamic_spawned.spin_speed_x
-        == dynamic_spawned.spin_speed_y
-        == dynamic_spawned.spin_speed_z
-        == dynamic_spawned.drift_speed_x
-        == dynamic_spawned.drift_speed_z
-        == 0.0
+    drift_has_drift = (
+        drift_spawned.drift_speed_x != 0.0
+        or drift_spawned.drift_speed_z != 0.0
     )
 
     CHECKER.assertTrue(static_is_static)
-    CHECKER.assertFalse(dynamic_is_static)
+    CHECKER.assertTrue(drift_has_drift)

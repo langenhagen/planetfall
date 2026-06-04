@@ -85,9 +85,6 @@ class ObstacleBatchScratch:
     def __init__(self, size: int) -> None:
         """Allocate reusable arrays for the given obstacle batch size."""
         self.size = size
-        self.spin_x: NDArray[np.float64] = np.empty(size, dtype=np.float64)
-        self.spin_y: NDArray[np.float64] = np.empty(size, dtype=np.float64)
-        self.spin_z: NDArray[np.float64] = np.empty(size, dtype=np.float64)
         self.drift_speed_x: NDArray[np.float64] = np.empty(size, dtype=np.float64)
         self.drift_speed_z: NDArray[np.float64] = np.empty(size, dtype=np.float64)
         self.drift_progress: NDArray[np.float64] = np.empty(size, dtype=np.float64)
@@ -351,9 +348,6 @@ def _update_obstacle_batch(
 
     obstacle_count = len(obstacles)
     scratch = _get_obstacle_scratch(obstacle_count)
-    spin_x = scratch.spin_x
-    spin_y = scratch.spin_y
-    spin_z = scratch.spin_z
     drift_speed_x = scratch.drift_speed_x
     drift_speed_z = scratch.drift_speed_z
     drift_progress = scratch.drift_progress
@@ -361,19 +355,12 @@ def _update_obstacle_batch(
     base_x = scratch.base_x
     base_z = scratch.base_z
     for index, obj in enumerate(obstacles):
-        spin_x[index] = obj.spin_speed_x
-        spin_y[index] = obj.spin_speed_y
-        spin_z[index] = obj.spin_speed_z
         drift_speed_x[index] = obj.drift_speed_x
         drift_speed_z[index] = obj.drift_speed_z
         drift_progress[index] = obj.drift_progress
         drift_blend[index] = obj.drift_blend
         base_x[index] = obj.base_x
         base_z[index] = obj.base_z
-
-    spin_x *= dt
-    spin_y *= dt
-    spin_z *= dt
 
     drift_mask = scratch.drift_mask
     apply_mask = scratch.apply_mask
@@ -396,9 +383,6 @@ def _update_obstacle_batch(
         )
 
     for index, spawned in enumerate(obstacles):
-        spawned.entity.rotation_x += float(spin_x[index])
-        spawned.entity.rotation_y += float(spin_y[index])
-        spawned.entity.rotation_z += float(spin_z[index])
         if apply_mask[index]:
             spawned.drift_blend = float(drift_blend[index])
             spawned.drift_progress = float(drift_progress[index])
