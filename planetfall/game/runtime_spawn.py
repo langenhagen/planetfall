@@ -86,6 +86,7 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
             blueprint.position.y,
             blueprint.position.z,
         )
+        entity.rotation_z = (variation_seed * 29) % 360
     else:
         entity = Entity(
             name=entity_name,
@@ -194,6 +195,16 @@ def spawn_entity_from_blueprint(  # noqa: C901, PLR0912, PLR0915
                 )
                 base_scale = Vec3(entity.scale.x, entity.scale.y, entity.scale.z)
                 if should_spin:
+                    spin_speed_z = signed_speed_from_seed(
+                        seed=variation_seed + 19,
+                        variant_count=gameplay_settings.obstacle_rock_variants + 10,
+                        minimum_magnitude=abs(
+                            gameplay_settings.obstacle_rock_speed_min
+                        ),
+                        maximum_magnitude=abs(
+                            gameplay_settings.obstacle_rock_speed_max
+                        ),
+                    )
                     should_drift = deterministic_probability_hit(
                         seed=variation_seed + 71,
                         probability=0.3,
