@@ -28,3 +28,28 @@ decisions. Append newest entries at the end.
 
 - Discussed porting to C++/another engine: possible CPU gains, but not a
   guaranteed big FPS win without architectural changes; high rewrite cost.
+
+
+## 2026-06-12 13:23 +0200
+
+Some older notes and ideas discussed w/ Leo
+
+- shield seed 2282025716
+- gold seed  2662569245
+- more scenes /  asteroid / coin patterns please and the patterns should be more distinctive, esp the coin patterns could be more creative in general.
+- make some backdrop sprites as deep space objects (far away) that slowly pass by
+  - (Explodierende) planeten?
+  - nebulae
+  - stars
+  - planets
+  - spacecraft
+  - ...
+- make some gigantic (3d) objects that sometimes pass by while falling they should be hundred's of meters long (or high) when passing, like a giant spaceship, or a giant asteroid
+  - rakete oder riesen asteroid oder zerbrochener planet die manchmal neben mir vorbei fliegt
+- convert/use panda3d preferred formats use the multify data format for bundling several assets together and reduce loading times?
+- 15 Minuten erde hat man verloren erde im Hintergrund wird immer größer
+- schwarzes loch das einen anziehen kann
+- droiden oder Raumschiffe als gegner
+- man kann schiessen, mit 2 pistolen
+- gibt auch vielleicht freunde
+- endgnegner riesen UFO
