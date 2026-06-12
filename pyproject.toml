@@ -36,6 +36,9 @@ lint = [
   "vulture>=2.14",
 ]
 
+[tool.uv]
+exclude-newer = "14 days"
+
 [build-system]
 requires = ["hatchling>=1.27.0"]
 build-backend = "hatchling.build"
